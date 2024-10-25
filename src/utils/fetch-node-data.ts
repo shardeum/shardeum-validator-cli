@@ -126,25 +126,36 @@ export function canUnstake(
   stakeLockTime: number,
   nodeStatus: string
 ): {canUnstake: boolean; reason: string; remainingTime: number} {
-  const res = {canUnstake: true, reason: '', remainingTime: -1};
+  const currentTime = Date.now();
+  const res = {
+    canUnstake: true,
+    reason: '',
+    remainingTime: -1,
+  };
 
-  const disallowedStates = [
+  const disallowedStates = new Set([
     'standby',
     'selected',
     'syncing',
     'ready',
     'active',
-  ];
-
-  if (disallowedStates.includes(nodeStatus)) {
+  ]);
+  const timeSinceLastStake = currentTime - lastStakeTimestamp;
+  if (disallowedStates.has(nodeStatus)) {
     res.canUnstake = false;
     res.reason = `Cannot unstake while in ${nodeStatus} state`;
-  } else if (new Date().getTime() - lastStakeTimestamp < stakeLockTime) {
+    res.remainingTime = stakeLockTime - timeSinceLastStake;
+    return res;
+  }
+
+  if (timeSinceLastStake < stakeLockTime) {
     res.canUnstake = false;
     res.reason = 'Node is still in stake lock period.';
-    res.remainingTime =
-      stakeLockTime - (new Date().getTime() - lastStakeTimestamp);
+    res.remainingTime = stakeLockTime - timeSinceLastStake;
+    return res;
   }
 
   return res;
 }
+
+

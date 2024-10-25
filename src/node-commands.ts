@@ -323,18 +323,22 @@ export function registerNodeCommands(program: Command) {
           logger.error('Unable to fetch node info: ' + e);
           nodeInfo = null;
         }
-        const eoaData = await fetchEOADetails(config, accountInfo.nominator);
+
         let unstakable = {
           canUnstake: false,
           reason: 'Could not fetch data',
           remainingTime: -1,
         };
-        if (eoaData) {
-          unstakable = canUnstake(
-            eoaData.operatorAccountInfo?.lastStakeTimestamp,
-            accountInfo?.stakeLockTime,
-            nodeInfo?.status
-          );
+        if (accountInfo.nominator) {
+          const eoaData = await fetchEOADetails(config, accountInfo.nominator);
+
+          if (eoaData) {
+            unstakable = canUnstake(
+              eoaData.operatorAccountInfo?.lastStakeTimestamp,
+              accountInfo?.stakeLockTime,
+              nodeInfo?.status
+            );
+          }
         }
         if (descriptions.length === 0) {
           // Node process not started
