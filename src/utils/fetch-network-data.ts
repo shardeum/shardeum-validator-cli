@@ -199,11 +199,13 @@ export async function fetchInitialParameters(
   );
   const nodeRewardInterval = new BN(response.nodeRewardInterval);
 
-  const stakeLockTime = Number(response.stakeLockTime);
+  const stakeLockTime = response.stakeLockTime
+    ? Number(response.stakeLockTime)
+    : 0;
 
-  if (!nodeRewardAmount || !nodeRewardInterval || !stakeLockTime) {
+  if (!nodeRewardAmount || !nodeRewardInterval) {
     throw new Error(
-      'Fetched initial parameters, but nodeRewardAmount, nodeRewardInterval or stakeLockTime were not found'
+      'Fetched initial parameters, but nodeRewardAmount and/or nodeRewardInterval were not found'
     );
   }
 
