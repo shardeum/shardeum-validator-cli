@@ -45,6 +45,7 @@ import {
   getCommitHashForCLI,
   getCommitHashForGUI,
   getCommitHashForValidator,
+  fetchUnstakeableDetails,
 } from './utils';
 import {isValidPrivate} from 'ethereumjs-util';
 import logger from './utils/logger';
@@ -315,6 +316,31 @@ export function registerNodeCommands(program: Command) {
         ]);
         // TODO: Use Promise.allSettled. Need to update nodeJs to 12.9
 
+        let nodeInfo;
+        try {
+          nodeInfo = await fetchNodeInfo(config);
+        } catch (e) {
+          logger.error('Unable to fetch node info: ' + e);
+          nodeInfo = null;
+        }
+
+        let unstakable = {
+          unlocked: false,
+          reason: 'Could not fetch data',
+          remainingTime: -1,
+        };
+        if (accountInfo.nominator) {
+          const eoaData = await fetchEOADetails(config, accountInfo.nominator);
+
+          if (eoaData) {
+            const unstakableData = await fetchUnstakeableDetails(
+              config,
+              publicKey,
+              accountInfo.nominator
+            );
+            unstakable = unstakableData ?? unstakable;
+          }
+        }
         if (descriptions.length === 0) {
           // Node process not started
           console.log(
@@ -333,6 +359,7 @@ export function registerNodeCommands(program: Command) {
                 ? ethers.utils.formatEther(accountInfo.totalPenalty)
                 : '',
               autorestart: nodeConfig.autoRestart,
+              unstakable: unstakable,
             })
           );
           cache.writeMaps();
@@ -343,14 +370,6 @@ export function registerNodeCommands(program: Command) {
         const status: Pm2ProcessStatus = statusFromPM2(description);
         if (status.status !== 'stopped') {
           // Node is started and active
-
-          let nodeInfo;
-          try {
-            nodeInfo = await fetchNodeInfo(config);
-          } catch (e) {
-            logger.error('Unable to fetch node info: ' + e);
-            nodeInfo = null;
-          }
 
           const lockedStakeStr = accountInfo.lockedStake
             ? ethers.utils.formatEther(accountInfo.lockedStake)
@@ -384,6 +403,7 @@ export function registerNodeCommands(program: Command) {
                 : '',
               autorestart: nodeConfig.autoRestart,
               nodeInfo: nodeInfo,
+              unstakable: unstakable,
               // TODO: Add fetching node info when in standby
             })
           );
@@ -414,6 +434,7 @@ export function registerNodeCommands(program: Command) {
               ? ethers.utils.formatEther(accountInfo.totalPenalty)
               : '',
             autorestart: nodeConfig.autoRestart,
+            unstakable: unstakable,
           })
         );
         cache.writeMaps();
@@ -432,24 +453,28 @@ export function registerNodeCommands(program: Command) {
       }
 
       try {
-        const eoaData = await fetchEOADetails(config, address)
-        const stakeValue = eoaData?.operatorAccountInfo?.stake?.value
-        const nominee = eoaData?.operatorAccountInfo?.nominee ?? ''
+        const eoaData = await fetchEOADetails(config, address);
+        const stakeValue = eoaData?.operatorAccountInfo?.stake?.value;
+        const nominee = eoaData?.operatorAccountInfo?.nominee ?? '';
 
         // Convert stake value to ether, handling potential hexadecimal input
         const stakeOutput = stakeValue
           ? ethers.utils.formatEther(
-              ethers.BigNumber.from(stakeValue.startsWith('0x') ? stakeValue : '0x' + stakeValue).toString()
+              ethers.BigNumber.from(
+                stakeValue.startsWith('0x') ? stakeValue : '0x' + stakeValue
+              ).toString()
             )
-          : ''
+          : '';
 
-        console.log(yaml.dump({
-          stake: stakeOutput,
-          nominee: nominee
-        }));
+        console.log(
+          yaml.dump({
+            stake: stakeOutput,
+            nominee: nominee,
+          })
+        );
       } catch (error) {
-        console.log(error)
-        console.error(`Error fetching stake details for ${address}: ${error}`)
+        console.log(error);
+        console.error(`Error fetching stake details for ${address}: ${error}`);
       }
     });
 
