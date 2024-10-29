@@ -359,7 +359,7 @@ export function registerNodeCommands(program: Command) {
                 ? ethers.utils.formatEther(accountInfo.totalPenalty)
                 : '',
               autorestart: nodeConfig.autoRestart,
-              unstakable: unstakable,
+              stakeState: unstakable,
             })
           );
           cache.writeMaps();
@@ -403,7 +403,7 @@ export function registerNodeCommands(program: Command) {
                 : '',
               autorestart: nodeConfig.autoRestart,
               nodeInfo: nodeInfo,
-              unstakable: unstakable,
+              stakeState: unstakable,
               // TODO: Add fetching node info when in standby
             })
           );
@@ -434,7 +434,7 @@ export function registerNodeCommands(program: Command) {
               ? ethers.utils.formatEther(accountInfo.totalPenalty)
               : '',
             autorestart: nodeConfig.autoRestart,
-            unstakable: unstakable,
+            stakeState: unstakable,
           })
         );
         cache.writeMaps();
