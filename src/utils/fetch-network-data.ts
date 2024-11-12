@@ -325,25 +325,6 @@ export async function fetchEOADetails(
 
   return eoaParams?.account;
 }
-export async function fetchUnstakeableDetails(
-  config: networkConfigType,
-  nominee: string,
-  nominator: string
-) {
-  const unstakable = await fetchDataFromNetwork<{
-    stakeUnlocked: {
-      unlocked: boolean;
-      reason: string;
-      remainingTime: number;
-    };
-  }>(
-    config,
-    `/canUnstake/${nominee}/${nominator}`,
-    data => data?.stakeUnlocked == null
-  );
-
-  return unstakable?.stakeUnlocked;
-}
 
 export async function fetchValidatorVersions(config: networkConfigType) {
   const validatorVersions = await fetchDataFromNetwork<{
