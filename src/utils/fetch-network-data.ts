@@ -190,7 +190,9 @@ export async function fetchInitialParameters(
   const nodeRewardInterval = new BN(response.nodeRewardInterval);
 
   if (!nodeRewardAmount || !nodeRewardInterval) {
-    throw new Error('Fetched initial parameters, but nodeRewardAmount and nodeRewardInterval are not found');
+    throw new Error(
+      'Fetched initial parameters, but nodeRewardAmount and nodeRewardInterval are not found'
+    );
   }
 
   const cycleDuration = await fetchCycleDuration(config);
@@ -320,6 +322,9 @@ export async function fetchEOADetails(
         stake: {value: string};
         nominee: string;
       };
+      reward: {
+        value: string;
+      };
     };
   }>(config, `/account/${eoaAddress}`, data => data?.account == null);
 
@@ -389,11 +394,8 @@ export async function getAccountInfoParams(
     }
 
     params.lockedStake = nodeData.stakeLock
-      ? new BN(
-          stripHexPrefix(nodeData.stakeLock),
-          16
-        ).toString()
-    : ''
+      ? new BN(stripHexPrefix(nodeData.stakeLock), 16).toString()
+      : '';
     previousRewards = new BN(stripHexPrefix(nodeData.reward), 16);
     const startTime = nodeData.rewardStartTime * 1000;
     const endTime = nodeData.rewardEndTime * 1000;
@@ -401,7 +403,7 @@ export async function getAccountInfoParams(
     if (startTime > 0 && endTime === 0) {
       // Node is earning rewards
       nodeActiveDuration = Date.now() - startTime;
-      
+
       // Calculate rewards only if the node is active
       const totalReward = nodeRewardAmount.mul(new BN(nodeActiveDuration, 16));
       params.accumulatedRewards = previousRewards.add(
