@@ -47,7 +47,7 @@ import {
   getCommitHashForValidator,
   fetchUnstakeableDetails,
 } from './utils';
-import {isValidPrivate} from 'ethereumjs-util';
+import {BN, isValidPrivate, stripHexPrefix} from 'ethereumjs-util';
 import logger from './utils/logger';
 import {isIP} from 'net';
 import Ajv from 'ajv';
@@ -457,6 +457,14 @@ export function registerNodeCommands(program: Command) {
         const stakeValue = eoaData?.operatorAccountInfo?.stake?.value;
         const nominee = eoaData?.operatorAccountInfo?.nominee ?? '';
 
+        let nodeAccountData;
+        if (eoaData?.operatorAccountInfo?.nominee != null) {
+          nodeAccountData = await fetchEOADetails(
+            config,
+            eoaData.operatorAccountInfo.nominee
+          );
+        }
+
         // Convert stake value to ether, handling potential hexadecimal input
         const stakeOutput = stakeValue
           ? ethers.utils.formatEther(
@@ -470,6 +478,14 @@ export function registerNodeCommands(program: Command) {
           yaml.dump({
             stake: stakeOutput,
             nominee: nominee,
+            rewards: nodeAccountData?.reward?.value
+              ? ethers.utils.formatEther(
+                  new BN(
+                    stripHexPrefix(nodeAccountData.reward.value),
+                    16
+                  ).toString()
+                )
+              : undefined,
           })
         );
       } catch (error) {
@@ -1027,7 +1043,6 @@ export function registerNodeCommands(program: Command) {
       }
     );
   }
-
 
   // setCommand
   //   .command('archiver')
