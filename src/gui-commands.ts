@@ -12,6 +12,7 @@ import {getInstalledGuiVersion} from './utils/project-data';
 import {File} from './utils'
 import crypto from 'crypto';
 import Ajv from "ajv"
+import argon2id from 'argon2';
 
 let config = defaultGuiConfig;
 
@@ -136,7 +137,7 @@ export function registerGuiCommands(program: Command) {
     .arguments('<password>')
     .description('Set the GUI server password, requirements: min 8 characters, at least 1 lower case letter, at least 1 upper case letter, at least 1 number, at least 1 special character !@#$%^&*()_+*$')
     .option('-h', 'Changes how the password is hashed. For internal use only')
-    .action((password, options) => {
+    .action(async (password, options) => {
       if (!options.h) {
         if (!validPassword(password)) {
           console.error(
@@ -147,7 +148,7 @@ export function registerGuiCommands(program: Command) {
 
         password = crypto.createHash('sha256').update(password).digest('hex');
       }
-      config.gui.pass = cryptoShardus.hash(password);
+      config.gui.pass = await argon2id.hash(password);
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       fs.writeFile(
         path.join(__dirname, `../${File.GUI_CONFIG}`),
