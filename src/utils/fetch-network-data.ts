@@ -52,7 +52,7 @@ async function fetchDataFromNetwork<T>(
   query: string,
   callback: (response: {[id: string]: string} | null) => boolean
 ): Promise<T | null> {
-  let retries = 3;
+  let retries = 5;
   if (!readActiveNode()) {
     await getNewActiveNode(config);
   }
