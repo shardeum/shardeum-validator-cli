@@ -52,7 +52,7 @@ async function fetchDataFromNetwork<T>(
   query: string,
   callback: (response: {[id: string]: string} | null) => boolean
 ): Promise<T | null> {
-  let retries = 3;
+  let retries = 5;
   if (!readActiveNode()) {
     await getNewActiveNode(config);
   }
@@ -63,7 +63,21 @@ async function fetchDataFromNetwork<T>(
 
   let data = {data: null, status: 500};
   let finalError: AxiosError | null = null;
-  do {
+
+  const url = `http://${savedActiveNode.ip}:${savedActiveNode.port}` + query;
+
+  try {
+    data = await axios.get(url, {timeout: 2000});
+  } catch (e) {
+    if (e instanceof AxiosError) {
+      finalError = e;
+    }
+
+    // set data to null and status to 500 to indicate that the request failed
+    data = {data: null, status: 500};
+  }
+
+  while ((data.status === 500 || callback(data.data)) && retries--) {
     try {
       await getNewActiveNode(config);
     } catch (e) {
@@ -84,7 +98,7 @@ async function fetchDataFromNetwork<T>(
       // set data to null and status to 500 to indicate that the request failed
       data = {data: null, status: 500};
     }
-  } while ((data.status === 500 || callback(data.data)) && retries--);
+  }
 
   if (retries < 0) {
     // figure out why we ran out of retries before throwing our error
