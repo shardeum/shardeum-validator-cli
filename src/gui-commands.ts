@@ -177,14 +177,19 @@ export function registerGuiCommands(program: Command) {
     .command('login')
     .arguments('<password>')
     .description('verify GUI password')
-    .action(password => {
-      if (
-        !timingSafeEqual(Buffer.from(password), Buffer.from(config.gui.pass))
-      ) {
-        console.log(yaml.dump({login: 'unauthorized'}));
-        return;
+    .action(async password => {
+      try {
+        // Verify the password with saved hash
+        const isValid = await argon2id.verify(config.gui.pass, password);
+        if (!isValid) {
+          console.log(yaml.dump({login: 'unauthorized'}));
+          return;
+        }
+        console.log(yaml.dump({login: 'authorized'}));
+      } catch (err) {
+        console.error('Error during password verification:', err);
+        console.log(yaml.dump({login: 'unauthorized'})); // Fail-safe unauthorized output
       }
-      console.log(yaml.dump({login: 'authorized'}));
     });
 
   function startGui() {
