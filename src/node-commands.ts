@@ -329,19 +329,24 @@ export function registerNodeCommands(program: Command) {
           reason: 'Could not fetch data',
           remainingTime: -1,
         };
-        if (accountInfo.nominator) {
-          const eoaData = await fetchEOADetails(config, accountInfo.nominator);
 
-          if (eoaData) {
-            const unstakableData = await fetchUnstakeableDetails(
+        if (descriptions.length === 0) {
+          if (accountInfo.nominator) {
+            const eoaData = await fetchEOADetails(
               config,
-              publicKey,
               accountInfo.nominator
             );
-            unstakable = unstakableData ?? unstakable;
+
+            if (eoaData) {
+              const unstakableData = await fetchUnstakeableDetails(
+                config,
+                publicKey,
+                accountInfo.nominator
+              );
+              unstakable = unstakableData ?? unstakable;
+            }
           }
-        }
-        if (descriptions.length === 0) {
+
           // Node process not started
           console.log(
             yaml.dump({
@@ -379,6 +384,30 @@ export function registerNodeCommands(program: Command) {
             nodeStatus =
               lockedStakeStr === '0.0' ? 'need-stake' : 'waiting-for-network';
 
+          if (nodeStatus === 'active') {
+            unstakable = {
+              unlocked: false,
+              reason: 'Node is active',
+              remainingTime: -1,
+            };
+          } else {
+            if (accountInfo.nominator) {
+              const eoaData = await fetchEOADetails(
+                config,
+                accountInfo.nominator
+              );
+
+              if (eoaData) {
+                const unstakableData = await fetchUnstakeableDetails(
+                  config,
+                  publicKey,
+                  accountInfo.nominator
+                );
+                unstakable = unstakableData ?? unstakable;
+              }
+            }
+          }
+
           console.log(
             yaml.dump({
               state: nodeStatus,
@@ -412,6 +441,19 @@ export function registerNodeCommands(program: Command) {
         }
 
         // Node was started but is currently inactive
+        if (accountInfo.nominator) {
+          const eoaData = await fetchEOADetails(config, accountInfo.nominator);
+
+          if (eoaData) {
+            const unstakableData = await fetchUnstakeableDetails(
+              config,
+              publicKey,
+              accountInfo.nominator
+            );
+            unstakable = unstakableData ?? unstakable;
+          }
+        }
+
         console.log(
           yaml.dump({
             state: 'stopped',
