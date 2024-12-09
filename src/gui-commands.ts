@@ -4,21 +4,27 @@ import path = require('path');
 import {timingSafeEqual} from 'crypto';
 import {Pm2ProcessStatus, statusFromPM2} from './pm2';
 import merge from 'deepmerge';
-import {defaultGuiConfig, guiConfigType, guiConfigSchema} from './config/default-gui-config';
+import {
+  defaultGuiConfig,
+  guiConfigType,
+  guiConfigSchema,
+} from './config/default-gui-config';
 import fs from 'fs';
 import * as yaml from 'js-yaml';
 import * as cryptoShardus from '@shardus/crypto-utils';
 import {getInstalledGuiVersion} from './utils/project-data';
-import {File} from './utils'
+import {File} from './utils';
 import crypto from 'crypto';
-import Ajv from "ajv"
+import Ajv from 'ajv';
 import argon2id from 'argon2';
 
 let config = defaultGuiConfig;
 
-const validateGuiConfig = new Ajv().compile(guiConfigSchema)
+const validateGuiConfig = new Ajv().compile(guiConfigSchema);
 
-cryptoShardus.init('64f152869ca2d473e4ba64ab53f49ccdb2edae22da192c126850970e788af347');
+cryptoShardus.init(
+  '64f152869ca2d473e4ba64ab53f49ccdb2edae22da192c126850970e788af347'
+);
 
 function isNumber(n: string) {
   const parsedN = parseInt(n);
@@ -28,6 +34,7 @@ function isNumber(n: string) {
 function validPassword(password: string) {
   return (
     password.length >= 8 &&
+    password.length <= 128 &&
     /[A-Z]/.test(password) &&
     /[a-z]/.test(password) &&
     /[0-9]/.test(password) &&
@@ -35,16 +42,21 @@ function validPassword(password: string) {
   );
 }
 
-const guiConfigPath = path.join(__dirname, `../${File.GUI_CONFIG}`)
-if (fs.existsSync(guiConfigPath)) { // eslint-disable-line security/detect-non-literal-fs-filename
+const guiConfigPath = path.join(__dirname, `../${File.GUI_CONFIG}`);
+if (fs.existsSync(guiConfigPath)) {
+  // eslint-disable-line security/detect-non-literal-fs-filename
   // eslint-disable-next-line security/detect-non-literal-fs-filename
-  const fileConfig = JSON.parse(fs.readFileSync(guiConfigPath).toString())
+  const fileConfig = JSON.parse(fs.readFileSync(guiConfigPath).toString());
   if (validateGuiConfig(fileConfig)) {
-    config = merge(config, fileConfig as guiConfigType, {arrayMerge: (target, source) => source})
+    config = merge(config, fileConfig as guiConfigType, {
+      arrayMerge: (target, source) => source,
+    });
     // `as guiConfigType` above is valid because validateGuiConfig() passed
   } else {
-    console.warn(`warning: config has been ignored due to invalid JSON schema:`)
-    console.warn(`${guiConfigPath}`)
+    console.warn(
+      `warning: config has been ignored due to invalid JSON schema:`
+    );
+    console.warn(`${guiConfigPath}`);
   }
 }
 
@@ -111,12 +123,12 @@ export function registerGuiCommands(program: Command) {
     .description('Set the GUI server port')
     .action(port => {
       if (!isNumber(port)) {
-        console.error("Port is not a number");
+        console.error('Port is not a number');
         return;
       }
       port = parseInt(port);
-      if(port < 1024) {
-        console.error("Port is reserved");
+      if (port < 1024) {
+        console.error('Port is reserved');
         return;
       }
       config.gui.port = parseInt(port);
@@ -135,7 +147,9 @@ export function registerGuiCommands(program: Command) {
   setCommand
     .command('password')
     .arguments('<password>')
-    .description('Set the GUI server password, requirements: min 8 characters, at least 1 lower case letter, at least 1 upper case letter, at least 1 number, at least 1 special character !@#$%^&*()_+*$')
+    .description(
+      'Set the GUI server password, requirements: min 8 characters, at least 1 lower case letter, at least 1 upper case letter, at least 1 number, at least 1 special character !@#$%^&*()_+*$'
+    )
     .option('-h', 'Changes how the password is hashed. For internal use only')
     .action(async (password, options) => {
       if (!options.h) {
