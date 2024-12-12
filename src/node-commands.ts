@@ -556,7 +556,9 @@ export function registerNodeCommands(program: Command) {
               __dirname,
               `../../${File.ENVIRONMENT_CONFIG}`
             );
-            pm2.start(scriptPath, err => {
+            pm2.start(scriptPath, 
+             // nodeArgs: ['--max-old-space-size=6144'], //not quite sure how to fit this in
+              err => {
               if (err) throw err;
 
               pm2.describe('validator', (err, processDescription) => {
