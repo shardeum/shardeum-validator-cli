@@ -32,6 +32,7 @@ fs.watch(configFilePath, (eventType, filename) => {
 const startApp = () => {
   const app = fork(path.join(__dirname, '../validator/dist/src/index.js'), {
     cwd: path.join(__dirname, './build'),
+    execArgv: ['--max-old-space-size=6144'],
   });
 
   app.on('exit', code => {
