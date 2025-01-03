@@ -22,6 +22,10 @@ let config = defaultGuiConfig;
 
 const validateGuiConfig = new Ajv().compile(guiConfigSchema);
 
+let failedAttempts = 0;
+let lockoutUntil: number | null = null;
+const FREE_ATTEMPTS = 5;
+
 cryptoShardus.init(
   '64f152869ca2d473e4ba64ab53f49ccdb2edae22da192c126850970e788af347'
 );
@@ -41,6 +45,8 @@ function validPassword(password: string) {
     /[!@#$%^&*()_+*$]/.test(password)
   );
 }
+
+const calculateLockoutDuration = (attempts: number): number => Math.min((2 ** attempts) * 60, 3600); // Max lockout of 1 hour
 
 const guiConfigPath = path.join(__dirname, `../${File.GUI_CONFIG}`);
 if (fs.existsSync(guiConfigPath)) {
@@ -178,17 +184,37 @@ export function registerGuiCommands(program: Command) {
     .arguments('<password>')
     .description('verify GUI password')
     .action(async password => {
+      const now = Date.now();
+
+      // Check if the user is currently locked out
+      if (lockoutUntil && now < lockoutUntil) {
+        const remainingTime = Math.ceil((lockoutUntil - now) / 1000);
+        console.log(yaml.dump({ login: 'locked_out', retry_after: `${remainingTime} seconds` }));
+        return;
+      }
+
       try {
         // Verify the password with saved hash
         const isValid = await argon2id.verify(config.gui.pass, password);
         if (!isValid) {
-          console.log(yaml.dump({login: 'unauthorized'}));
+          failedAttempts++;
+          if (failedAttempts >= FREE_ATTEMPTS) {
+            const lockoutDuration = calculateLockoutDuration(failedAttempts - FREE_ATTEMPTS);
+            lockoutUntil = now + lockoutDuration * 1000;
+            console.log(yaml.dump({ login: 'unauthorized', retry_after: `${lockoutDuration} seconds` }));
+          } else {
+            console.log(yaml.dump({ login: 'unauthorized' }));
+          }
           return;
         }
-        console.log(yaml.dump({login: 'authorized'}));
+
+        // Reset failed attempts on successful login
+        failedAttempts = 0;
+        lockoutUntil = null;
+        console.log(yaml.dump({ login: 'authorized' }));
       } catch (err) {
         console.error('Error during password verification:', err);
-        console.log(yaml.dump({login: 'unauthorized'})); // Fail-safe unauthorized output
+        console.log(yaml.dump({ login: 'unauthorized' })); // Fail-safe unauthorized output
       }
     });
 
