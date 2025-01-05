@@ -22,6 +22,8 @@ let config = defaultGuiConfig;
 
 const validateGuiConfig = new Ajv().compile(guiConfigSchema);
 
+const stateFilePath = './test.txt';
+
 let failedAttempts = 0;
 let lockoutUntil: number | null = null;
 const FREE_ATTEMPTS = 5;
@@ -45,6 +47,19 @@ function validPassword(password: string) {
     /[!@#$%^&*()_+*$]/.test(password)
   );
 }
+
+// Helper function to load state
+const loadState = (): { failedAttempts: number; lockoutUntil: number | null } => {
+  if (fs.existsSync(stateFilePath)) {
+    return JSON.parse(fs.readFileSync(stateFilePath, 'utf-8'));
+  }
+  return { failedAttempts: 0, lockoutUntil: null };
+};
+
+// Helper function to save state
+const saveState = (state: { failedAttempts: number; lockoutUntil: number | null }) => {
+  fs.writeFileSync(stateFilePath, JSON.stringify(state, null, 2));
+};
 
 const calculateLockoutDuration = (attempts: number): number => Math.min((2 ** attempts) * 60, 3600); // Max lockout of 1 hour
 
@@ -184,6 +199,7 @@ export function registerGuiCommands(program: Command) {
     .arguments('<password>')
     .description('verify GUI password')
     .action(async password => {
+      let { failedAttempts, lockoutUntil } = loadState();
       const now = Date.now();
 
       // Check if the user is currently locked out
@@ -201,8 +217,10 @@ export function registerGuiCommands(program: Command) {
           if (failedAttempts >= FREE_ATTEMPTS) {
             const lockoutDuration = calculateLockoutDuration(failedAttempts - FREE_ATTEMPTS);
             lockoutUntil = now + lockoutDuration * 1000;
+            saveState({ failedAttempts, lockoutUntil }); // Save updated state
             console.log(yaml.dump({ login: 'unauthorized', retry_after: `${lockoutDuration} seconds` }));
           } else {
+            saveState({ failedAttempts, lockoutUntil }); // Save updated state
             console.log(yaml.dump({ login: 'unauthorized' }));
           }
           return;
@@ -211,6 +229,7 @@ export function registerGuiCommands(program: Command) {
         // Reset failed attempts on successful login
         failedAttempts = 0;
         lockoutUntil = null;
+        saveState({ failedAttempts, lockoutUntil }); // Save updated state
         console.log(yaml.dump({ login: 'authorized' }));
       } catch (err) {
         console.error('Error during password verification:', err);
