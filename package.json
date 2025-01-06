@@ -65,5 +65,8 @@
   },
   "overrides": {
     "semver": "7.5.3"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
