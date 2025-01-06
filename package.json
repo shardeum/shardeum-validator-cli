@@ -1,5 +1,5 @@
 {
-  "name": "operator-cli",
+  "name": "@shardeum-foundation/shardeum-validator-cli",
   "version": "1.2.1",
   "description": "",
   "main": "index.js",
@@ -48,7 +48,7 @@
     "typescript-estree": "18.1.0"
   },
   "dependencies": {
-    "@shardus/crypto-utils": "git+https://github.com/shardeum/lib-crypto-utils#dev",
+    "@shardeum-foundation/lib-crypto-utils": "4.1.5",
     "ajv": "8.12.0",
     "argon2": "0.41.1",
     "axios": "1.4.0",

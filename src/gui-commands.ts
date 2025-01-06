@@ -11,7 +11,7 @@ import {
 } from './config/default-gui-config';
 import fs from 'fs';
 import * as yaml from 'js-yaml';
-import * as cryptoShardus from '@shardus/crypto-utils';
+import * as cryptoShardus from '@shardeum-foundation/lib-crypto-utils';
 import {getInstalledGuiVersion} from './utils/project-data';
 import {File} from './utils';
 import crypto from 'crypto';
