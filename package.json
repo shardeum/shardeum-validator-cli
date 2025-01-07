@@ -1,6 +1,6 @@
 {
   "name": "@shardeum-foundation/shardeum-validator-cli",
-  "version": "1.2.1",
+  "version": "1.2.2-prerelease.0",
   "description": "",
   "main": "index.js",
   "scripts": {
