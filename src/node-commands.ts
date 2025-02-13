@@ -46,6 +46,7 @@ import {
   getCommitHashForGUI,
   getCommitHashForValidator,
   fetchUnstakeableDetails,
+  fetchGenesisStatus,
 } from './utils';
 import {BN, isValidPrivate, stripHexPrefix} from 'ethereumjs-util';
 import logger from './utils/logger';
@@ -307,12 +308,14 @@ export function registerNodeCommands(program: Command) {
           {totalTimeValidating, lastRotationIndex, lastActive},
           {exitMessage, exitStatus},
           accountInfo,
+          genesisStatus,
         ] = await Promise.all([
           fetchStakeParameters(config),
           getPerformanceStatus(),
           fetchNodeProgress().then(getProgressData),
           getExitInformation(),
           getAccountInfoParams(config, publicKey),
+          fetchGenesisStatus(config, publicKey),
         ]);
         // TODO: Use Promise.allSettled. Need to update nodeJs to 12.9
 
@@ -363,8 +366,14 @@ export function registerNodeCommands(program: Command) {
               totalPenalty: accountInfo.totalPenalty
                 ? ethers.utils.formatEther(accountInfo.totalPenalty)
                 : '',
+              lifetimeEarnings: accountInfo.lifetimeEarnings
+                ? ethers.utils.formatEther(
+                    accountInfo.lifetimeEarnings.toString()
+                  )
+                : '',
               autorestart: nodeConfig.autoRestart,
               stakeState: unstakable,
+              isGenesisNode: genesisStatus?.success,
             })
           );
           cache.writeMaps();
@@ -426,6 +435,9 @@ export function registerNodeCommands(program: Command) {
               currentRewards: ethers.utils.formatEther(
                 accountInfo.accumulatedRewards.toString()
               ),
+              lifetimeEarnings: ethers.utils.formatEther(
+                accountInfo.lifetimeEarnings.toString()
+              ),
               lockedStake: lockedStakeStr,
               totalPenalty: accountInfo.totalPenalty
                 ? ethers.utils.formatEther(accountInfo.totalPenalty)
@@ -433,6 +445,7 @@ export function registerNodeCommands(program: Command) {
               autorestart: nodeConfig.autoRestart,
               nodeInfo: nodeInfo,
               stakeState: unstakable,
+              isGenesisNode: genesisStatus?.success,
               // TODO: Add fetching node info when in standby
             })
           );
@@ -475,8 +488,14 @@ export function registerNodeCommands(program: Command) {
             totalPenalty: accountInfo.totalPenalty
               ? ethers.utils.formatEther(accountInfo.totalPenalty)
               : '',
+            lifetimeEarnings: accountInfo.lifetimeEarnings
+              ? ethers.utils.formatEther(
+                  accountInfo.lifetimeEarnings.toString()
+                )
+              : '',
             autorestart: nodeConfig.autoRestart,
             stakeState: unstakable,
+            isGenesisNode: genesisStatus?.success,
           })
         );
         cache.writeMaps();
