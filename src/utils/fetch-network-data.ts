@@ -480,16 +480,11 @@ export async function fetchCycleDuration(config: networkConfigType) {
   return latestCycle.newestCycle.duration;
 }
 
-export async function fetchGenesisStatus(
-  config: networkConfigType,
-  pubKey: string
-) {
-  console.log('Fetching genesis status', pubKey);
+export async function fetchGenesisStatus(config: networkConfigType, pubKey: string) {
   const genesisStatus = await fetchDataFromNetwork<{
     success: boolean;
     reason: string;
   }>(config, `/is-genesis-node/${pubKey}`, data => !data);
 
-  console.log('Genesis Status:', genesisStatus);
-  return genesisStatus;
+  return genesisStatus?.success || false;
 }

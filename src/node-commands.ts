@@ -308,14 +308,12 @@ export function registerNodeCommands(program: Command) {
           {totalTimeValidating, lastRotationIndex, lastActive},
           {exitMessage, exitStatus},
           accountInfo,
-          genesisStatus,
         ] = await Promise.all([
           fetchStakeParameters(config),
           getPerformanceStatus(),
           fetchNodeProgress().then(getProgressData),
           getExitInformation(),
           getAccountInfoParams(config, publicKey),
-          fetchGenesisStatus(config, publicKey),
         ]);
         // TODO: Use Promise.allSettled. Need to update nodeJs to 12.9
 
@@ -366,14 +364,8 @@ export function registerNodeCommands(program: Command) {
               totalPenalty: accountInfo.totalPenalty
                 ? ethers.utils.formatEther(accountInfo.totalPenalty)
                 : '',
-              lifetimeEarnings: accountInfo.lifetimeEarnings
-                ? ethers.utils.formatEther(
-                    accountInfo.lifetimeEarnings.toString()
-                  )
-                : '',
               autorestart: nodeConfig.autoRestart,
               stakeState: unstakable,
-              isGenesisNode: genesisStatus?.success,
             })
           );
           cache.writeMaps();
@@ -435,9 +427,6 @@ export function registerNodeCommands(program: Command) {
               currentRewards: ethers.utils.formatEther(
                 accountInfo.accumulatedRewards.toString()
               ),
-              lifetimeEarnings: ethers.utils.formatEther(
-                accountInfo.lifetimeEarnings.toString()
-              ),
               lockedStake: lockedStakeStr,
               totalPenalty: accountInfo.totalPenalty
                 ? ethers.utils.formatEther(accountInfo.totalPenalty)
@@ -445,7 +434,6 @@ export function registerNodeCommands(program: Command) {
               autorestart: nodeConfig.autoRestart,
               nodeInfo: nodeInfo,
               stakeState: unstakable,
-              isGenesisNode: genesisStatus?.success,
               // TODO: Add fetching node info when in standby
             })
           );
@@ -488,14 +476,8 @@ export function registerNodeCommands(program: Command) {
             totalPenalty: accountInfo.totalPenalty
               ? ethers.utils.formatEther(accountInfo.totalPenalty)
               : '',
-            lifetimeEarnings: accountInfo.lifetimeEarnings
-              ? ethers.utils.formatEther(
-                  accountInfo.lifetimeEarnings.toString()
-                )
-              : '',
             autorestart: nodeConfig.autoRestart,
             stakeState: unstakable,
-            isGenesisNode: genesisStatus?.success,
           })
         );
         cache.writeMaps();
@@ -552,6 +534,32 @@ export function registerNodeCommands(program: Command) {
       } catch (error) {
         console.log(error);
         console.error(`Error fetching stake details for ${address}: ${error}`);
+      }
+    });
+
+  program
+    .command('is_genesis_node')
+    .description('Show if EOA is registered to run a genesis node')
+    .argument('<address>', 'The EOA address to fetch genesis info for')
+    .action(async address => {
+      if (!ethers.utils.isAddress(address)) {
+        console.error('Invalid address entered');
+        return;
+      }
+
+      try {
+        const isGenesisNode = await fetchGenesisStatus(config, address);
+
+        console.log(
+          yaml.dump({
+            isGenesisNode: isGenesisNode,
+          })
+        );
+      } catch (error) {
+        console.log(error);
+        console.error(
+          `Error fetching genesis details for ${address}: ${error}`
+        );
       }
     });
 
