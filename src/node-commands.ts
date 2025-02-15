@@ -46,6 +46,7 @@ import {
   getCommitHashForGUI,
   getCommitHashForValidator,
   fetchUnstakeableDetails,
+  fetchGenesisStatus,
 } from './utils';
 import {BN, isValidPrivate, stripHexPrefix} from 'ethereumjs-util';
 import logger from './utils/logger';
@@ -533,6 +534,32 @@ export function registerNodeCommands(program: Command) {
       } catch (error) {
         console.log(error);
         console.error(`Error fetching stake details for ${address}: ${error}`);
+      }
+    });
+
+  program
+    .command('is_genesis_node')
+    .description('Show if EOA is registered to run a genesis node')
+    .argument('<address>', 'The EOA address to fetch genesis info for')
+    .action(async address => {
+      if (!ethers.utils.isAddress(address)) {
+        console.error('Invalid address entered');
+        return;
+      }
+
+      try {
+        const isGenesisNode = await fetchGenesisStatus(config, address);
+
+        console.log(
+          yaml.dump({
+            isGenesisNode: isGenesisNode,
+          })
+        );
+      } catch (error) {
+        console.log(error);
+        console.error(
+          `Error fetching genesis details for ${address}: ${error}`
+        );
       }
     });
 
