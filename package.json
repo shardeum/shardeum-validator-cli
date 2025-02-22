@@ -48,7 +48,7 @@
     "typescript-estree": "18.1.0"
   },
   "dependencies": {
-    "@shardeum-foundation/lib-crypto-utils": "4.1.8-prerelease.1",
+    "@shardeum-foundation/lib-crypto-utils": "4.1.8-prerelease.2",
     "ajv": "8.12.0",
     "argon2": "0.41.1",
     "axios": "1.4.0",
