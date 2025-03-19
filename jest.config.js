@@ -9,11 +9,7 @@ module.exports = {
   },
   collectCoverage: true,
   coverageDirectory: 'coverage',
-  collectCoverageFrom: [
-    'src/**/*.ts',
-    '!src/**/*.d.ts',
-    '!src/**/__tests__/**',
-  ],
+  collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts', '!src/**/__tests__/**'],
   coverageReporters: ['text', 'lcov', 'json-summary'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   setupFilesAfterEnv: ['<rootDir>/test/setup.ts'],
@@ -25,4 +21,4 @@ module.exports = {
       statements: 3.18,
     },
   },
-}; 
+}

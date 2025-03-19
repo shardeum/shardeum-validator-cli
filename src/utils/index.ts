@@ -13,8 +13,8 @@ export enum File {
   ENVIRONMENT_CONFIG = 'environment.config.js',
 }
 
-export * from './fetch-network-data';
-export * from './fetch-node-data';
-export * from './performance-stats';
-export * from './project-data';
-export * from './userInput';
+export * from './fetch-network-data'
+export * from './fetch-node-data'
+export * from './performance-stats'
+export * from './project-data'
+export * from './userInput'

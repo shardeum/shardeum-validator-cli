@@ -1,10 +1,10 @@
-import winston from 'winston';
-import path from 'path';
+import winston from 'winston'
+import path from 'path'
 
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.json(),
-  defaultMeta: {service: 'node'},
+  defaultMeta: { service: 'node' },
   transports: [
     new winston.transports.File({
       filename: path.join(__dirname, '../../logs/error.log'),
@@ -14,6 +14,6 @@ const logger = winston.createLogger({
       filename: path.join(__dirname, '../../logs/combined.log'),
     }),
   ],
-});
+})
 
-export default logger;
+export default logger
