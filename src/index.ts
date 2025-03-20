@@ -1,28 +1,25 @@
 #!/usr/bin/env node
 
-import {Command} from 'commander';
+import { Command } from 'commander'
 
-import cliPackageJson = require('../package.json');
-import dotenv = require('dotenv');
-import {registerGuiCommands} from './gui-commands';
-import {registerNodeCommands} from './node-commands';
-import path = require('path');
+import cliPackageJson = require('../package.json')
+import dotenv = require('dotenv')
+import { registerGuiCommands } from './gui-commands'
+import { registerNodeCommands } from './node-commands'
+import path = require('path')
 
-dotenv.config();
+dotenv.config()
 
-process.chdir(path.join(__dirname, '..')); // specify the path to the build folder
-const program = new Command();
+process.chdir(path.join(__dirname, '..')) // specify the path to the build folder
+const program = new Command()
 
-program
-  .name('operator-cli')
-  .description('CLI part of the operator dashboard')
-  .version(cliPackageJson.version);
+program.name('operator-cli').description('CLI part of the operator dashboard').version(cliPackageJson.version)
 
 /** === NODE === */
-registerNodeCommands(program);
+registerNodeCommands(program)
 
 /** === GUI === */
-registerGuiCommands(program);
+registerGuiCommands(program)
 
 // Run the program and parse the cli
-program.parse();
+program.parse()

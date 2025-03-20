@@ -1,22 +1,22 @@
 export const defaultNodeConfig = {
   autoRestart: true,
-  lastStopped: undefined
-};
+  lastStopped: undefined,
+}
 
 export type nodeConfigType = {
-  autoRestart: boolean,
+  autoRestart: boolean
   lastStopped?: number
 }
 
 export const nodeConfigSchema = {
-  type: "object",
+  type: 'object',
   properties: {
     autoRestart: {
-      type: "boolean"
+      type: 'boolean',
     },
     lastStopped: {
-      type: "number"
-    }
+      type: 'number',
+    },
   },
-  required: ["autoRestart"]
+  required: ['autoRestart'],
 }

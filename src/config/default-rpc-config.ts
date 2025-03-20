@@ -1,15 +1,15 @@
 const exampleRpcConfig = {
   url: 'http://localhost:8545',
-};
+}
 
-export type rpcConfigType = typeof exampleRpcConfig;
+export type rpcConfigType = typeof exampleRpcConfig
 
 export const rpcConfigSchema = {
-  type: "object",
+  type: 'object',
   properties: {
     url: {
-      type: "string"
-    }
+      type: 'string',
+    },
   },
-  required: ["url"]
+  required: ['url'],
 }

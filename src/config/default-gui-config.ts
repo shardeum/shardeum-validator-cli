@@ -3,29 +3,29 @@ export const defaultGuiConfig = {
     port: 8080,
     pass: '',
   },
-};
+}
 
-export type guiConfigType = typeof defaultGuiConfig;
+export type guiConfigType = typeof defaultGuiConfig
 
 export const guiConfigSchema = {
-  type: "object",
+  type: 'object',
   properties: {
     gui: {
-      type: "object",
+      type: 'object',
       properties: {
         port: {
-          type: "integer",
+          type: 'integer',
           minimum: 1024,
           maximum: 65535,
         },
         pass: {
-          type: "string"
+          type: 'string',
         },
       },
-      required: ["port", "pass"],
+      required: ['port', 'pass'],
       additionalProperties: false,
-    }
+    },
   },
-  required: ["gui"],
+  required: ['gui'],
   additionalProperties: false,
-};
+}

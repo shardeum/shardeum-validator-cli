@@ -1,4 +1,4 @@
-const path = require('path');
+const path = require('path')
 
 module.exports = [
   {
@@ -8,4 +8,4 @@ module.exports = [
     cwd: path.join(__dirname, './build'),
     autorestart: false, // set this to false because we have our own restart controller
   },
-];
+]
