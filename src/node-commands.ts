@@ -317,9 +317,9 @@ function startRetryInterval(walletWithProvider: ethers.Wallet, options: { force?
         retryInterval = null
       }
       lastFailedUnstakeAttempt = null
+      console.log('Unstake successful! Rate limit lifted.')
     } catch (error) {
       console.error('Retry attempt failed:', error)
-      lastFailedUnstakeAttempt = Date.now()
     }
   }, RETRY_INTERVAL_MS)
 }
@@ -354,7 +354,9 @@ async function unstake(options: { force?: boolean }) {
     await executeUnstakeTransaction(walletWithProvider, txDetails)
   } catch (error) {
     console.error(error)
-    lastFailedUnstakeAttempt = Date.now()
+    if (lastFailedUnstakeAttempt === null) {
+      lastFailedUnstakeAttempt = Date.now()
+    }
   }
 }
 
