@@ -310,14 +310,14 @@ function startRetryInterval(walletWithProvider: ethers.Wallet, options: { force?
     try {
       const txDetails = await createUnstakeTransaction(walletWithProvider, options)
       console.log('Retrying unstake with data:', txDetails)
-      await executeUnstakeTransaction(walletWithProvider, txDetails)
-
-      if (retryInterval) {
-        clearInterval(retryInterval)
-        retryInterval = null
-      }
-      lastFailedUnstakeAttempt = null
-      console.log('Unstake successful! Rate limit lifted.')
+      executeUnstakeTransaction(walletWithProvider, txDetails).then(() => {
+        if (retryInterval) {
+          clearInterval(retryInterval)
+          retryInterval = null
+        }
+        lastFailedUnstakeAttempt = null
+        console.log('Unstake successful! Rate limit lifted.')
+      })
     } catch (error) {
       console.error('Retry attempt failed:', error)
     }
@@ -344,11 +344,7 @@ async function unstake(options: { force?: boolean }) {
     const provider = new ethers.providers.JsonRpcProvider(rpcServer.url)
     const walletWithProvider = new ethers.Wallet(privateKey, provider)
 
-    if (checkRateLimit()) {
-      console.log('Will automatically retry the transaction every 2 minutes...')
-      startRetryInterval(walletWithProvider, options)
-      return
-    }
+    startRetryInterval(walletWithProvider, options)
 
     const txDetails = await createUnstakeTransaction(walletWithProvider, options)
     await executeUnstakeTransaction(walletWithProvider, txDetails)
