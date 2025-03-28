@@ -246,6 +246,118 @@ const dashboardPackageJson = JSON.parse(readFileSync(path.join(__dirname, '../..
 // eslint-disable-next-line security/detect-non-literal-fs-filename
 fs.writeFileSync(path.join(__dirname, `../${File.CONFIG}`), JSON.stringify(config, undefined, 2))
 
+let lastFailedUnstakeAttempt: number | null = null
+const UNSTAKE_RATE_LIMIT_MS = 5 * 60 * 1000 // 5 minutes in milliseconds
+const RETRY_INTERVAL_MS = 2 * 60 * 1000 // 2 minutes in milliseconds
+let retryInterval: NodeJS.Timeout | null = null
+
+async function getPrivateKey(): Promise<string> {
+  let privateKey = await getUserInput('Please enter your private key: ')
+  while (privateKey.length !== 64 || !isValidPrivate(Buffer.from(privateKey, 'hex'))) {
+    console.log('Invalid private key entered.')
+    privateKey = await getUserInput('Please enter your private key: ')
+  }
+  return privateKey
+}
+
+async function createUnstakeTransaction(walletWithProvider: ethers.Wallet, options: { force?: boolean }) {
+  const eoaData = await fetchEOADetails(config, walletWithProvider.address)
+  if (!eoaData) {
+    throw new Error("Couldn't unstake (`eoaData` is null)")
+  }
+
+  if (eoaData.operatorAccountInfo?.nominee == null || eoaData.operatorAccountInfo?.stake?.value === '00') {
+    throw new Error('No stake found')
+  }
+
+  const [gasPrice, from, nonce] = await Promise.all([
+    walletWithProvider.getGasPrice(),
+    walletWithProvider.getAddress(),
+    walletWithProvider.getTransactionCount(),
+  ])
+
+  const unstakeData = {
+    isInternalTx: true,
+    internalTXType: 7,
+    nominator: walletWithProvider.address.toLowerCase(),
+    timestamp: Date.now(),
+    nominee: eoaData?.operatorAccountInfo?.nominee,
+    force: options.force ?? false,
+  }
+
+  return {
+    from,
+    to: '0x0000000000000000000000000000000000010000',
+    gasPrice,
+    gasLimit: 30000000,
+    data: ethers.utils.hexlify(ethers.utils.toUtf8Bytes(JSON.stringify(unstakeData))),
+    nonce,
+  }
+}
+
+async function executeUnstakeTransaction(walletWithProvider: ethers.Wallet, txDetails: any) {
+  const { hash, data, wait } = await walletWithProvider.sendTransaction(txDetails)
+  console.log('TX RECEIPT: ', { hash, data })
+  const txConfirmation = await wait()
+  console.log('TX CONFIRMED: ', txConfirmation)
+  return txConfirmation
+}
+
+function startRetryInterval(walletWithProvider: ethers.Wallet, options: { force?: boolean }) {
+  if (retryInterval) return
+
+  retryInterval = setInterval(async () => {
+    try {
+      const txDetails = await createUnstakeTransaction(walletWithProvider, options)
+      console.log('Retrying unstake with data:', txDetails)
+      await executeUnstakeTransaction(walletWithProvider, txDetails)
+
+      if (retryInterval) {
+        clearInterval(retryInterval)
+        retryInterval = null
+      }
+      lastFailedUnstakeAttempt = null
+    } catch (error) {
+      console.error('Retry attempt failed:', error)
+      lastFailedUnstakeAttempt = Date.now()
+    }
+  }, RETRY_INTERVAL_MS)
+}
+
+function checkRateLimit(): boolean {
+  if (lastFailedUnstakeAttempt === null) return false
+
+  const timeSinceLastAttempt = Date.now() - lastFailedUnstakeAttempt
+  if (timeSinceLastAttempt < UNSTAKE_RATE_LIMIT_MS) {
+    const remainingMinutes = Math.ceil((UNSTAKE_RATE_LIMIT_MS - timeSinceLastAttempt) / 60000)
+    console.error(
+      `Please wait ${remainingMinutes} minute${remainingMinutes > 1 ? 's' : ''} before trying to unstake again.`
+    )
+    return true
+  }
+  return false
+}
+
+async function unstake(options: { force?: boolean }) {
+  try {
+    const privateKey = await getPrivateKey()
+    const provider = new ethers.providers.JsonRpcProvider(rpcServer.url)
+    const walletWithProvider = new ethers.Wallet(privateKey, provider)
+
+    if (checkRateLimit()) {
+      console.log('Will automatically retry the transaction every 2 minutes...')
+      startRetryInterval(walletWithProvider, options)
+      return
+    }
+
+    const txDetails = await createUnstakeTransaction(walletWithProvider, options)
+    await executeUnstakeTransaction(walletWithProvider, txDetails)
+  } catch (error) {
+    console.error(error)
+    lastFailedUnstakeAttempt = Date.now()
+  }
+}
+
 export function registerNodeCommands(program: Command) {
   program
     .command('status')
@@ -676,66 +788,6 @@ export function registerNodeCommands(program: Command) {
       }
     })
 
-  async function unstake(options: { force: boolean }) {
-    // Take input from user for PRIVATE KEY
-    let privateKey = await getUserInput('Please enter your private key: ')
-    while (privateKey.length !== 64 || !isValidPrivate(Buffer.from(privateKey, 'hex'))) {
-      console.log('Invalid private key entered.')
-      privateKey = await getUserInput('Please enter your private key: ')
-    }
-
-    try {
-      const provider = new ethers.providers.JsonRpcProvider(rpcServer.url)
-
-      const walletWithProvider = new ethers.Wallet(privateKey, provider)
-
-      const eoaData = await fetchEOADetails(config, walletWithProvider.address)
-      if (!eoaData) {
-        console.error("Couldn't unstake (`eoaData` is null)")
-        return
-      }
-
-      if (eoaData.operatorAccountInfo?.nominee == null || eoaData.operatorAccountInfo?.stake?.value === '00') {
-        console.error('No stake found')
-        return
-      }
-
-      const [gasPrice, from, nonce] = await Promise.all([
-        walletWithProvider.getGasPrice(),
-        walletWithProvider.getAddress(),
-        walletWithProvider.getTransactionCount(),
-      ])
-
-      const unstakeData = {
-        isInternalTx: true,
-        internalTXType: 7,
-        nominator: walletWithProvider.address.toLowerCase(),
-        timestamp: Date.now(),
-        nominee: eoaData?.operatorAccountInfo?.nominee,
-        force: options.force ?? false,
-      }
-      console.log(unstakeData)
-
-      const txDetails = {
-        from,
-        to: '0x0000000000000000000000000000000000010000',
-        gasPrice,
-        gasLimit: 30000000,
-        data: ethers.utils.hexlify(ethers.utils.toUtf8Bytes(JSON.stringify(unstakeData))),
-        nonce,
-      }
-      console.log(txDetails)
-
-      const { hash, data, wait } = await walletWithProvider.sendTransaction(txDetails)
-
-      console.log('TX RECEIPT: ', { hash, data })
-      const txConfirmation = await wait()
-      console.log('TX CONFRIMED: ', txConfirmation)
-    } catch (error) {
-      console.error(error)
-    }
-  }
-
   program
     .command('unstake')
     .description('Remove staked SHM')
@@ -758,15 +810,15 @@ export function registerNodeCommands(program: Command) {
           } catch (error: unknown) {
             // Error while fetching nodeInfo - presuming node is not active
           }
-          const nodeStatus = nodeInfo?.status
-          if (
-            nodeStatus === 'initializing' ||
-            nodeStatus === 'standby' ||
-            nodeStatus === 'syncing' ||
-            nodeStatus === 'active'
-          ) {
-            throw 'Please stop your node before unstaking.'
-          }
+          // const nodeStatus = nodeInfo?.status
+          // if (
+          //   nodeStatus === 'initializing' ||
+          //   nodeStatus === 'standby' ||
+          //   nodeStatus === 'syncing' ||
+          //   nodeStatus === 'active'
+          // ) {
+          //   throw 'Please stop your node before unstaking.'
+          // }
         }
 
         await unstake(options)
