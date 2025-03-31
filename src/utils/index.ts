@@ -11,6 +11,7 @@ export enum File {
   START_SUMMARY = 'start-summary.json',
   NODE_PROGRESS = 'node-progress.json',
   ENVIRONMENT_CONFIG = 'environment.config.js',
+  UNSTAKE_REQUEST = 'unstake-request.json',
 }
 
 export * from './fetch-network-data'

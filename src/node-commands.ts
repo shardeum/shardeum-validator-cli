@@ -247,7 +247,6 @@ const dashboardPackageJson = JSON.parse(readFileSync(path.join(__dirname, '../..
 fs.writeFileSync(path.join(__dirname, `../${File.CONFIG}`), JSON.stringify(config, undefined, 2))
 
 let lastFailedUnstakeAttempt: number | null = null
-const UNSTAKE_RATE_LIMIT_MS = 5 * 60 * 1000 // 5 minutes in milliseconds
 const RETRY_INTERVAL_MS = 2 * 60 * 1000 // 2 minutes in milliseconds
 let retryInterval: NodeJS.Timeout | null = null
 
@@ -295,59 +294,105 @@ async function createUnstakeTransaction(walletWithProvider: ethers.Wallet, optio
   }
 }
 
+function getRunningUnstake(): {timestamp: number, hash: string} | null {
+  try {
+    if (fs.existsSync(path.join(__dirname, `../${File.UNSTAKE_REQUEST}`))) {
+      return JSON.parse(
+        // eslint-disable-next-line security/detect-non-literal-fs-filename
+        fs.readFileSync(path.join(__dirname, `../${File.UNSTAKE_REQUEST}`)).toString(),
+      );
+    }
+  } catch (e) {
+    console.error('Error reading unstake file:', e);
+  }
+  return null;
+}
+
+function addUnstakeToFile(timestamp: number, hash: string) {
+  try {
+    const runningUnstake = { timestamp, hash }
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    fs.writeFileSync(path.join(__dirname, `../${File.UNSTAKE_REQUEST}`), JSON.stringify(runningUnstake, undefined, 2))
+  } catch (e) {
+    console.error('Error writing unstake file:', e)
+  }
+}
+
+function removeUnstakeFile() {
+  try {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    fs.unlinkSync(path.join(__dirname, `../${File.UNSTAKE_REQUEST}`))
+  } catch (e) {
+    console.error('Error removing unstake file:', e)
+  }
+}
+
 async function executeUnstakeTransaction(walletWithProvider: ethers.Wallet, txDetails: any) {
   const { hash, data, wait } = await walletWithProvider.sendTransaction(txDetails)
+  addUnstakeToFile(Date.now(), hash)
   console.log('TX RECEIPT: ', { hash, data })
   const txConfirmation = await wait()
   console.log('TX CONFIRMED: ', txConfirmation)
   return txConfirmation
 }
 
-function startRetryInterval(walletWithProvider: ethers.Wallet, options: { force?: boolean }) {
-  if (retryInterval) return
-
-  retryInterval = setInterval(async () => {
+function startRetryProcess(walletWithProvider: ethers.Wallet, options: { force?: boolean }, initialDelay = 0) {
+  if (initialDelay > 0) {
+    console.log(`Rate limiting unstaking. Next unstake attempt will start in ${initialDelay / 1000} seconds...`)
+  }
+  let retryTimeoutId: NodeJS.Timeout | null = null
+  const attemptUnstake = async () => {
     try {
       const txDetails = await createUnstakeTransaction(walletWithProvider, options)
-      console.log('Retrying unstake with data:', txDetails)
-      executeUnstakeTransaction(walletWithProvider, txDetails).then(() => {
-        if (retryInterval) {
-          clearInterval(retryInterval)
-          retryInterval = null
-        }
-        lastFailedUnstakeAttempt = null
-        console.log('Unstake successful! Rate limit lifted.')
-      })
+      console.log('Unstake with data:', txDetails)
+
+      // Always schedule the next retry before executing the transaction
+      retryTimeoutId = setTimeout(attemptUnstake, RETRY_INTERVAL_MS)
+
+      // Then try the transaction
+      executeUnstakeTransaction(walletWithProvider, txDetails)
+        .then(() => {
+          // Only if successful, cancel the next retry
+          if (retryTimeoutId) {
+            clearTimeout(retryTimeoutId)
+            retryTimeoutId = null
+          }
+          removeUnstakeFile()
+          lastFailedUnstakeAttempt = null
+          console.log('Unstake successful! Rate limit lifted.')
+        })
+        .catch((error) => {
+          console.error('Unstake execution failed:', error)
+          // Let the already scheduled retry run
+        })
     } catch (error) {
       console.error('Retry attempt failed:', error)
+      // Schedule next retry
+      retryTimeoutId = setTimeout(attemptUnstake, RETRY_INTERVAL_MS)
     }
-  }, RETRY_INTERVAL_MS)
-}
-
-function checkRateLimit(): boolean {
-  if (lastFailedUnstakeAttempt === null) return false
-
-  const timeSinceLastAttempt = Date.now() - lastFailedUnstakeAttempt
-  if (timeSinceLastAttempt < UNSTAKE_RATE_LIMIT_MS) {
-    const remainingMinutes = Math.ceil((UNSTAKE_RATE_LIMIT_MS - timeSinceLastAttempt) / 60000)
-    console.error(
-      `Please wait ${remainingMinutes} minute${remainingMinutes > 1 ? 's' : ''} before trying to unstake again.`
-    )
-    return true
   }
-  return false
+
+  // Start the process with the initial delay (0 for immediate execution)
+  retryTimeoutId = setTimeout(attemptUnstake, initialDelay)
+
+  // Return a function to cancel the retry process if needed
+  return () => {
+    if (retryTimeoutId) {
+      clearTimeout(retryTimeoutId)
+      retryTimeoutId = null
+    }
+  }
 }
 
-async function unstake(options: { force?: boolean }) {
+async function unstake(options: { force?: boolean, ignoreRateLimit?: boolean }) {
   try {
     const privateKey = await getPrivateKey()
     const provider = new ethers.providers.JsonRpcProvider(rpcServer.url)
     const walletWithProvider = new ethers.Wallet(privateKey, provider)
 
-    startRetryInterval(walletWithProvider, options)
-
-    const txDetails = await createUnstakeTransaction(walletWithProvider, options)
-    await executeUnstakeTransaction(walletWithProvider, txDetails)
+    const runningUnstake = getRunningUnstake()
+    const delay = !options?.ignoreRateLimit && runningUnstake?.timestamp ? RETRY_INTERVAL_MS - (Date.now() - runningUnstake.timestamp) : 0
+    startRetryProcess(walletWithProvider, options, delay > 0 ? delay : 0)
   } catch (error) {
     console.error(error)
     if (lastFailedUnstakeAttempt === null) {
@@ -790,6 +835,7 @@ export function registerNodeCommands(program: Command) {
     .command('unstake')
     .description('Remove staked SHM')
     .option('-f, --force', 'Force unstake in case the node is stuck, will forfeit rewards')
+    .option('--ignoreRateLimit', 'Ignore rate limit to sending unstake txs')
     .action(async (options) => {
       try {
         if (options.force) {
