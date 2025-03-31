@@ -45,6 +45,7 @@ import logger from './utils/logger'
 import { isIP } from 'net'
 import Ajv from 'ajv'
 import { VALIDATOR_CLEAN_PATH } from './projectFlags'
+
 type VersionStats = {
   runningCliVersion: string
   runningCliBranch: string
@@ -245,6 +246,164 @@ const dashboardPackageJson = JSON.parse(readFileSync(path.join(__dirname, '../..
 
 // eslint-disable-next-line security/detect-non-literal-fs-filename
 fs.writeFileSync(path.join(__dirname, `../${File.CONFIG}`), JSON.stringify(config, undefined, 2))
+
+let lastFailedUnstakeAttempt: number | null = null
+const RETRY_INTERVAL_MS = 2 * 60 * 1000 // 2 minutes in milliseconds
+const retryInterval: NodeJS.Timeout | null = null
+
+async function getPrivateKey(): Promise<string> {
+  let privateKey = await getUserInput('Please enter your private key: ')
+  while (privateKey.length !== 64 || !isValidPrivate(Buffer.from(privateKey, 'hex'))) {
+    console.log('Invalid private key entered.')
+    privateKey = await getUserInput('Please enter your private key: ')
+  }
+  return privateKey
+}
+
+async function createUnstakeTransaction(walletWithProvider: ethers.Wallet, options: { force?: boolean }) {
+  const eoaData = await fetchEOADetails(config, walletWithProvider.address)
+  if (!eoaData) {
+    throw new Error("Couldn't unstake (`eoaData` is null)")
+  }
+
+  if (eoaData.operatorAccountInfo?.nominee == null || eoaData.operatorAccountInfo?.stake?.value === '00') {
+    throw new Error('No stake found')
+  }
+
+  const [gasPrice, from, nonce] = await Promise.all([
+    walletWithProvider.getGasPrice(),
+    walletWithProvider.getAddress(),
+    walletWithProvider.getTransactionCount(),
+  ])
+
+  const unstakeData = {
+    isInternalTx: true,
+    internalTXType: 7,
+    nominator: walletWithProvider.address.toLowerCase(),
+    timestamp: Date.now(),
+    nominee: eoaData?.operatorAccountInfo?.nominee,
+    force: options.force ?? false,
+  }
+
+  return {
+    from,
+    to: '0x0000000000000000000000000000000000010000',
+    gasPrice,
+    gasLimit: 30000000,
+    data: ethers.utils.hexlify(ethers.utils.toUtf8Bytes(JSON.stringify(unstakeData))),
+    nonce,
+  }
+}
+
+function getRunningUnstake(): { timestamp: number; hash: string } | null {
+  try {
+    if (fs.existsSync(path.join(__dirname, `../${File.UNSTAKE_REQUEST}`))) {
+      return JSON.parse(
+        // eslint-disable-next-line security/detect-non-literal-fs-filename
+        fs.readFileSync(path.join(__dirname, `../${File.UNSTAKE_REQUEST}`)).toString()
+      )
+    }
+  } catch (e) {
+    console.error('Error reading unstake file:', e)
+  }
+  return null
+}
+
+function addUnstakeToFile(timestamp: number, hash: string) {
+  try {
+    const runningUnstake = { timestamp, hash }
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    fs.writeFileSync(path.join(__dirname, `../${File.UNSTAKE_REQUEST}`), JSON.stringify(runningUnstake, undefined, 2))
+  } catch (e) {
+    console.error('Error writing unstake file:', e)
+  }
+}
+
+function removeUnstakeFile() {
+  try {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    fs.unlinkSync(path.join(__dirname, `../${File.UNSTAKE_REQUEST}`))
+  } catch (e) {
+    console.error('Error removing unstake file:', e)
+  }
+}
+
+async function executeUnstakeTransaction(walletWithProvider: ethers.Wallet, txDetails: any) {
+  const { hash, data, wait } = await walletWithProvider.sendTransaction(txDetails)
+  addUnstakeToFile(Date.now(), hash)
+  console.log('TX RECEIPT: ', { hash, data })
+  const txConfirmation = await wait()
+  console.log('TX CONFIRMED: ', txConfirmation)
+  return txConfirmation
+}
+
+function startRetryProcess(walletWithProvider: ethers.Wallet, options: { force?: boolean }, initialDelay = 0) {
+  if (initialDelay > 0) {
+    console.log(`Rate limiting unstaking. Next unstake attempt will start in ${initialDelay / 1000} seconds...`)
+  }
+  let retryTimeoutId: NodeJS.Timeout | null = null
+  const attemptUnstake = async () => {
+    try {
+      const txDetails = await createUnstakeTransaction(walletWithProvider, options)
+      console.log('Unstake with data:', txDetails)
+
+      // Always schedule the next retry before executing the transaction
+      retryTimeoutId = setTimeout(attemptUnstake, RETRY_INTERVAL_MS)
+
+      // Then try the transaction
+      executeUnstakeTransaction(walletWithProvider, txDetails)
+        .then(() => {
+          // Only if successful, cancel the next retry
+          if (retryTimeoutId) {
+            clearTimeout(retryTimeoutId)
+            retryTimeoutId = null
+          }
+          removeUnstakeFile()
+          lastFailedUnstakeAttempt = null
+          console.log('Unstake successful! Rate limit lifted.')
+        })
+        .catch((error) => {
+          console.error('Unstake execution failed:', error)
+          // Let the already scheduled retry run
+        })
+    } catch (error) {
+      console.error('Retry attempt failed:', error)
+      // Schedule next retry
+      retryTimeoutId = setTimeout(attemptUnstake, RETRY_INTERVAL_MS)
+    }
+  }
+
+  // Start the process with the initial delay (0 for immediate execution)
+  retryTimeoutId = setTimeout(attemptUnstake, initialDelay)
+
+  // Return a function to cancel the retry process if needed
+  return () => {
+    if (retryTimeoutId) {
+      clearTimeout(retryTimeoutId)
+      retryTimeoutId = null
+    }
+  }
+}
+
+async function unstake(options: { force?: boolean; ignoreRateLimit?: boolean }) {
+  try {
+    const privateKey = await getPrivateKey()
+    const provider = new ethers.providers.JsonRpcProvider(rpcServer.url)
+    const walletWithProvider = new ethers.Wallet(privateKey, provider)
+
+    const runningUnstake = getRunningUnstake()
+    const delay =
+      !options?.ignoreRateLimit && runningUnstake?.timestamp
+        ? RETRY_INTERVAL_MS - (Date.now() - runningUnstake.timestamp)
+        : 0
+    startRetryProcess(walletWithProvider, options, delay > 0 ? delay : 0)
+  } catch (error) {
+    console.error(error)
+    if (lastFailedUnstakeAttempt === null) {
+      lastFailedUnstakeAttempt = Date.now()
+    }
+  }
+}
 
 export function registerNodeCommands(program: Command) {
   program
@@ -676,70 +835,11 @@ export function registerNodeCommands(program: Command) {
       }
     })
 
-  async function unstake(options: { force: boolean }) {
-    // Take input from user for PRIVATE KEY
-    let privateKey = await getUserInput('Please enter your private key: ')
-    while (privateKey.length !== 64 || !isValidPrivate(Buffer.from(privateKey, 'hex'))) {
-      console.log('Invalid private key entered.')
-      privateKey = await getUserInput('Please enter your private key: ')
-    }
-
-    try {
-      const provider = new ethers.providers.JsonRpcProvider(rpcServer.url)
-
-      const walletWithProvider = new ethers.Wallet(privateKey, provider)
-
-      const eoaData = await fetchEOADetails(config, walletWithProvider.address)
-      if (!eoaData) {
-        console.error("Couldn't unstake (`eoaData` is null)")
-        return
-      }
-
-      if (eoaData.operatorAccountInfo?.nominee == null || eoaData.operatorAccountInfo?.stake?.value === '00') {
-        console.error('No stake found')
-        return
-      }
-
-      const [gasPrice, from, nonce] = await Promise.all([
-        walletWithProvider.getGasPrice(),
-        walletWithProvider.getAddress(),
-        walletWithProvider.getTransactionCount(),
-      ])
-
-      const unstakeData = {
-        isInternalTx: true,
-        internalTXType: 7,
-        nominator: walletWithProvider.address.toLowerCase(),
-        timestamp: Date.now(),
-        nominee: eoaData?.operatorAccountInfo?.nominee,
-        force: options.force ?? false,
-      }
-      console.log(unstakeData)
-
-      const txDetails = {
-        from,
-        to: '0x0000000000000000000000000000000000010000',
-        gasPrice,
-        gasLimit: 30000000,
-        data: ethers.utils.hexlify(ethers.utils.toUtf8Bytes(JSON.stringify(unstakeData))),
-        nonce,
-      }
-      console.log(txDetails)
-
-      const { hash, data, wait } = await walletWithProvider.sendTransaction(txDetails)
-
-      console.log('TX RECEIPT: ', { hash, data })
-      const txConfirmation = await wait()
-      console.log('TX CONFRIMED: ', txConfirmation)
-    } catch (error) {
-      console.error(error)
-    }
-  }
-
   program
     .command('unstake')
     .description('Remove staked SHM')
     .option('-f, --force', 'Force unstake in case the node is stuck, will forfeit rewards')
+    .option('--ignoreRateLimit', 'Ignore rate limit to sending unstake txs')
     .action(async (options) => {
       try {
         if (options.force) {
