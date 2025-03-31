@@ -45,6 +45,7 @@ import logger from './utils/logger'
 import { isIP } from 'net'
 import Ajv from 'ajv'
 import { VALIDATOR_CLEAN_PATH } from './projectFlags'
+
 type VersionStats = {
   runningCliVersion: string
   runningCliBranch: string
@@ -294,18 +295,18 @@ async function createUnstakeTransaction(walletWithProvider: ethers.Wallet, optio
   }
 }
 
-function getRunningUnstake(): {timestamp: number, hash: string} | null {
+function getRunningUnstake(): { timestamp: number; hash: string } | null {
   try {
     if (fs.existsSync(path.join(__dirname, `../${File.UNSTAKE_REQUEST}`))) {
       return JSON.parse(
         // eslint-disable-next-line security/detect-non-literal-fs-filename
-        fs.readFileSync(path.join(__dirname, `../${File.UNSTAKE_REQUEST}`)).toString(),
-      );
+        fs.readFileSync(path.join(__dirname, `../${File.UNSTAKE_REQUEST}`)).toString()
+      )
     }
   } catch (e) {
-    console.error('Error reading unstake file:', e);
+    console.error('Error reading unstake file:', e)
   }
-  return null;
+  return null
 }
 
 function addUnstakeToFile(timestamp: number, hash: string) {
@@ -384,14 +385,17 @@ function startRetryProcess(walletWithProvider: ethers.Wallet, options: { force?:
   }
 }
 
-async function unstake(options: { force?: boolean, ignoreRateLimit?: boolean }) {
+async function unstake(options: { force?: boolean; ignoreRateLimit?: boolean }) {
   try {
     const privateKey = await getPrivateKey()
     const provider = new ethers.providers.JsonRpcProvider(rpcServer.url)
     const walletWithProvider = new ethers.Wallet(privateKey, provider)
 
     const runningUnstake = getRunningUnstake()
-    const delay = !options?.ignoreRateLimit && runningUnstake?.timestamp ? RETRY_INTERVAL_MS - (Date.now() - runningUnstake.timestamp) : 0
+    const delay =
+      !options?.ignoreRateLimit && runningUnstake?.timestamp
+        ? RETRY_INTERVAL_MS - (Date.now() - runningUnstake.timestamp)
+        : 0
     startRetryProcess(walletWithProvider, options, delay > 0 ? delay : 0)
   } catch (error) {
     console.error(error)
