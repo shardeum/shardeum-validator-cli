@@ -249,7 +249,7 @@ fs.writeFileSync(path.join(__dirname, `../${File.CONFIG}`), JSON.stringify(confi
 
 let lastFailedUnstakeAttempt: number | null = null
 const RETRY_INTERVAL_MS = 2 * 60 * 1000 // 2 minutes in milliseconds
-let retryInterval: NodeJS.Timeout | null = null
+const retryInterval: NodeJS.Timeout | null = null
 
 async function getPrivateKey(): Promise<string> {
   let privateKey = await getUserInput('Please enter your private key: ')
