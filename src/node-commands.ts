@@ -854,15 +854,15 @@ export function registerNodeCommands(program: Command) {
           } catch (error: unknown) {
             // Error while fetching nodeInfo - presuming node is not active
           }
-          // const nodeStatus = nodeInfo?.status
-          // if (
-          //   nodeStatus === 'initializing' ||
-          //   nodeStatus === 'standby' ||
-          //   nodeStatus === 'syncing' ||
-          //   nodeStatus === 'active'
-          // ) {
-          //   throw 'Please stop your node before unstaking.'
-          // }
+          const nodeStatus = nodeInfo?.status
+          if (
+            nodeStatus === 'initializing' ||
+            nodeStatus === 'standby' ||
+            nodeStatus === 'syncing' ||
+            nodeStatus === 'active'
+          ) {
+            throw 'Please stop your node before unstaking.'
+          }
         }
 
         await unstake(options)
