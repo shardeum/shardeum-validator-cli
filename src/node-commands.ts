@@ -602,6 +602,7 @@ export function registerNodeCommands(program: Command) {
             rewards: nodeAccountData?.reward?.value
               ? ethers.utils.formatEther(new BN(stripHexPrefix(nodeAccountData.reward.value), 16).toString())
               : undefined,
+            unstakeInterval: RETRY_INTERVAL_MS,
           })
         )
       } catch (error) {
