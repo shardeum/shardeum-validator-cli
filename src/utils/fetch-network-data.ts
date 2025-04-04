@@ -310,6 +310,18 @@ export async function fetchUnstakeableDetails(config: networkConfigType, nominee
   return unstakable?.stakeUnlocked
 }
 
+export async function fetchStakeableDetails(config: networkConfigType, nominee: string) {
+  const stakeable = await fetchDataFromNetwork<{
+    stakeAllowed: {
+      restakeAllowed: boolean
+      reason: string
+      remainingTime: number
+    }
+  }>(config, `/canStake/${nominee}`, (data) => data?.error != 'account not found' && data?.stakeAllowed == null)
+
+  return stakeable?.stakeAllowed
+}
+
 export async function fetchValidatorVersions(config: networkConfigType) {
   const validatorVersions = await fetchDataFromNetwork<{
     nodeInfo: {

@@ -39,6 +39,7 @@ import {
   getCommitHashForValidator,
   fetchUnstakeableDetails,
   fetchGenesisStatus,
+  fetchStakeableDetails,
 } from './utils'
 import { BN, isValidPrivate, stripHexPrefix } from 'ethereumjs-util'
 import logger from './utils/logger'
@@ -457,6 +458,15 @@ export function registerNodeCommands(program: Command) {
           remainingTime: -1,
         }
 
+        let stakeable = {
+          restakeAllowed: false,
+          reason: 'Could not fetch data',
+          remainingTime: -1,
+        }
+
+        const stakableData = await fetchStakeableDetails(config, publicKey)
+        stakeable = stakableData ?? stakeable
+
         if (descriptions.length === 0) {
           if (accountInfo.nominator) {
             const eoaData = await fetchEOADetails(config, accountInfo.nominator)
@@ -479,6 +489,7 @@ export function registerNodeCommands(program: Command) {
               totalPenalty: accountInfo.totalPenalty ? ethers.utils.formatEther(accountInfo.totalPenalty) : '',
               autorestart: nodeConfig.autoRestart,
               stakeState: unstakable,
+              stakeable
             })
           )
           cache.writeMaps()
@@ -531,6 +542,7 @@ export function registerNodeCommands(program: Command) {
               autorestart: nodeConfig.autoRestart,
               nodeInfo: nodeInfo,
               stakeState: unstakable,
+              stakeable
               // TODO: Add fetching node info when in standby
             })
           )
@@ -561,6 +573,7 @@ export function registerNodeCommands(program: Command) {
             totalPenalty: accountInfo.totalPenalty ? ethers.utils.formatEther(accountInfo.totalPenalty) : '',
             autorestart: nodeConfig.autoRestart,
             stakeState: unstakable,
+            stakeable
           })
         )
         cache.writeMaps()
