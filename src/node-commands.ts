@@ -39,6 +39,7 @@ import {
   getCommitHashForValidator,
   fetchUnstakeableDetails,
   fetchGenesisStatus,
+  fetchStakeableDetails,
 } from './utils'
 import { BN, isValidPrivate, stripHexPrefix } from 'ethereumjs-util'
 import logger from './utils/logger'
@@ -457,6 +458,15 @@ export function registerNodeCommands(program: Command) {
           remainingTime: -1,
         }
 
+        let stakeable = {
+          restakeAllowed: false,
+          reason: 'Could not fetch data',
+          remainingTime: -1,
+        }
+
+        const stakableData = await fetchStakeableDetails(config, publicKey)
+        stakeable = stakableData ?? stakeable
+
         if (descriptions.length === 0) {
           if (accountInfo.nominator) {
             const eoaData = await fetchEOADetails(config, accountInfo.nominator)
@@ -479,6 +489,7 @@ export function registerNodeCommands(program: Command) {
               totalPenalty: accountInfo.totalPenalty ? ethers.utils.formatEther(accountInfo.totalPenalty) : '',
               autorestart: nodeConfig.autoRestart,
               stakeState: unstakable,
+              stakeable
             })
           )
           cache.writeMaps()
@@ -531,6 +542,7 @@ export function registerNodeCommands(program: Command) {
               autorestart: nodeConfig.autoRestart,
               nodeInfo: nodeInfo,
               stakeState: unstakable,
+              stakeable
               // TODO: Add fetching node info when in standby
             })
           )
@@ -561,6 +573,7 @@ export function registerNodeCommands(program: Command) {
             totalPenalty: accountInfo.totalPenalty ? ethers.utils.formatEther(accountInfo.totalPenalty) : '',
             autorestart: nodeConfig.autoRestart,
             stakeState: unstakable,
+            stakeable
           })
         )
         cache.writeMaps()
@@ -755,8 +768,6 @@ export function registerNodeCommands(program: Command) {
     .argument('<value>', 'The amount of SHM to stake')
     .description('Stake the set amount of SHM at the stake address. Rewards will be sent to set reward address.')
     .action(async (stakeValue) => {
-      //TODO should we handle consecutive stakes?
-
       // Fetch the public key from secrets.json
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       if (!fs.existsSync(path.join(__dirname, `../${File.SECRETS}`))) {
@@ -771,6 +782,15 @@ export function registerNodeCommands(program: Command) {
 
       if (secrets.publicKey == null) {
         console.error('Unable to find public key in secrets.json')
+        return
+      }
+
+      // Check if staking is allowed
+      const stakeable = await fetchStakeableDetails(config, secrets.publicKey)
+      if (!stakeable?.restakeAllowed && stakeable?.remainingTime != null) {
+        const minutes = Math.floor(stakeable.remainingTime / 60000)
+        const seconds = Math.floor((stakeable.remainingTime % 60000) / 1000)
+        console.error(`Your last stake action was too recent. Please wait ${minutes}m ${seconds}s to stake again.`)
         return
       }
 
