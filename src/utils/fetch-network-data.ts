@@ -311,6 +311,14 @@ export async function fetchUnstakeableDetails(config: networkConfigType, nominee
 }
 
 export async function fetchStakeableDetails(config: networkConfigType, nominee: string) {
+  if (nominee === '') {
+    return {
+      restakeAllowed: false,
+      reason: 'No nominee provided',
+      remainingTime: 0,
+    }
+  }
+  
   const stakeable = await fetchDataFromNetwork<{
     stakeAllowed: {
       restakeAllowed: boolean
