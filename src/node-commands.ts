@@ -427,6 +427,10 @@ export function registerNodeCommands(program: Command) {
             fs.readFileSync(path.join(__dirname, `../${File.SECRETS}`)).toString()
           )
           publicKey = secrets.publicKey
+        } else {
+          console.error('Please start the node once before using status command')
+          pm2.disconnect()
+          return
         }
 
         const [
@@ -489,7 +493,7 @@ export function registerNodeCommands(program: Command) {
               totalPenalty: accountInfo.totalPenalty ? ethers.utils.formatEther(accountInfo.totalPenalty) : '',
               autorestart: nodeConfig.autoRestart,
               stakeState: unstakable,
-              stakeable
+              stakeable,
             })
           )
           cache.writeMaps()
@@ -542,7 +546,7 @@ export function registerNodeCommands(program: Command) {
               autorestart: nodeConfig.autoRestart,
               nodeInfo: nodeInfo,
               stakeState: unstakable,
-              stakeable
+              stakeable,
               // TODO: Add fetching node info when in standby
             })
           )
@@ -573,7 +577,7 @@ export function registerNodeCommands(program: Command) {
             totalPenalty: accountInfo.totalPenalty ? ethers.utils.formatEther(accountInfo.totalPenalty) : '',
             autorestart: nodeConfig.autoRestart,
             stakeState: unstakable,
-            stakeable
+            stakeable,
           })
         )
         cache.writeMaps()
@@ -615,7 +619,6 @@ export function registerNodeCommands(program: Command) {
             rewards: nodeAccountData?.reward?.value
               ? ethers.utils.formatEther(new BN(stripHexPrefix(nodeAccountData.reward.value), 16).toString())
               : undefined,
-            unstakeInterval: RETRY_INTERVAL_MS,
           })
         )
       } catch (error) {
@@ -768,6 +771,8 @@ export function registerNodeCommands(program: Command) {
     .argument('<value>', 'The amount of SHM to stake')
     .description('Stake the set amount of SHM at the stake address. Rewards will be sent to set reward address.')
     .action(async (stakeValue) => {
+      //TODO should we handle consecutive stakes?
+
       // Fetch the public key from secrets.json
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       if (!fs.existsSync(path.join(__dirname, `../${File.SECRETS}`))) {
