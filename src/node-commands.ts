@@ -338,71 +338,72 @@ async function executeUnstakeTransaction(walletWithProvider: ethers.Wallet, txDe
   return txConfirmation
 }
 
-function startRetryProcess(walletWithProvider: ethers.Wallet, options: { force?: boolean }, initialDelay = 0) {
-  if (initialDelay > 0) {
-    console.log(`Rate limiting unstaking. Next unstake attempt will start in ${initialDelay / 1000} seconds...`)
-  }
-  let retryTimeoutId: NodeJS.Timeout | null = null
-  const attemptUnstake = async () => {
-    try {
-      const txDetails = await createUnstakeTransaction(walletWithProvider, options)
-      console.log('Unstake with data:', txDetails)
-
-      // Always schedule the next retry before executing the transaction
-      retryTimeoutId = setTimeout(attemptUnstake, RETRY_INTERVAL_MS)
-
-      // Then try the transaction
-      executeUnstakeTransaction(walletWithProvider, txDetails)
-        .then(() => {
-          // Only if successful, cancel the next retry
-          if (retryTimeoutId) {
-            clearTimeout(retryTimeoutId)
-            retryTimeoutId = null
-          }
-          removeUnstakeFile()
-          lastFailedUnstakeAttempt = null
-          console.log('Unstake successful! Rate limit lifted.')
-        })
-        .catch((error) => {
-          console.error('Unstake execution failed:', error)
-          // Let the already scheduled retry run
-        })
-    } catch (error) {
-      console.error('Retry attempt failed:', error)
-      // Schedule next retry
-      retryTimeoutId = setTimeout(attemptUnstake, RETRY_INTERVAL_MS)
-    }
-  }
-
-  // Start the process with the initial delay (0 for immediate execution)
-  retryTimeoutId = setTimeout(attemptUnstake, initialDelay)
-
-  // Return a function to cancel the retry process if needed
-  return () => {
-    if (retryTimeoutId) {
-      clearTimeout(retryTimeoutId)
-      retryTimeoutId = null
-    }
-  }
-}
-
 async function unstake(options: { force?: boolean; ignoreRateLimit?: boolean }) {
   try {
     const privateKey = await getPrivateKey()
     const provider = new ethers.providers.JsonRpcProvider(rpcServer.url)
     const walletWithProvider = new ethers.Wallet(privateKey, provider)
 
+    // Get public key from secrets file
+    let publicKey = ''
+    if (fs.existsSync(path.join(__dirname, `../${File.SECRETS}`))) {
+      const secrets = JSON.parse(fs.readFileSync(path.join(__dirname, `../${File.SECRETS}`)).toString())
+      publicKey = secrets.publicKey
+    }
+
+    if (!publicKey) {
+      throw new Error("Couldn't find public key in secrets file. Please start the node once before unstaking.")
+    }
+
+    // Check if the user has any stake
+    const eoaData = await fetchEOADetails(config, walletWithProvider.address)
+    if (!eoaData || !eoaData.operatorAccountInfo?.nominee || eoaData.operatorAccountInfo?.stake?.value === '00') {
+      throw new Error('No stake found for this address')
+    }
+
+    // Check if unstaking is allowed
+    const unstakableDetails = await fetchUnstakeableDetails(config, publicKey, walletWithProvider.address)
+    if (unstakableDetails && !unstakableDetails.unlocked && !options.ignoreRateLimit) {
+      if (unstakableDetails.remainingTime > 0) {
+        const minutes = Math.floor(unstakableDetails.remainingTime / 60000)
+        const seconds = Math.floor((unstakableDetails.remainingTime % 60000) / 1000)
+        throw new Error(
+          `Unstaking not allowed yet: ${unstakableDetails.reason}. Please wait ${minutes}m ${seconds}s before trying again.`
+        )
+      }
+    }
+
+    // Check for rate limiting but don't start retry process
     const runningUnstake = getRunningUnstake()
-    const delay =
-      !options?.ignoreRateLimit && runningUnstake?.timestamp
-        ? RETRY_INTERVAL_MS - (Date.now() - runningUnstake.timestamp)
-        : 0
-    startRetryProcess(walletWithProvider, options, delay > 0 ? delay : 0)
+    if (!options?.ignoreRateLimit && runningUnstake?.timestamp) {
+      const delay = RETRY_INTERVAL_MS - (Date.now() - runningUnstake.timestamp)
+      if (delay > 0) {
+        const minutes = Math.floor(delay / 60000)
+        const seconds = Math.floor((delay % 60000) / 1000)
+        throw new Error(`Rate limiting unstaking. Please wait ${minutes}m ${seconds}s before trying again.`)
+      }
+    }
+
+    // Execute unstake transaction
+    console.log('Creating unstake transaction...')
+    const txDetails = await createUnstakeTransaction(walletWithProvider, options)
+    console.log('Sending unstake transaction...')
+    try {
+      const confirmation = await executeUnstakeTransaction(walletWithProvider, txDetails)
+      console.log('Unstake successful!', confirmation.transactionHash)
+      // Clean up unstake file
+      removeUnstakeFile()
+      return true
+    } catch (error) {
+      console.error('Failed to execute unstake transaction:', error)
+      throw new Error('Unstake transaction failed. Try again later or use --ignoreRateLimit option.')
+    }
   } catch (error) {
     console.error(error)
     if (lastFailedUnstakeAttempt === null) {
       lastFailedUnstakeAttempt = Date.now()
     }
+    return false
   }
 }
 
@@ -891,8 +892,10 @@ export function registerNodeCommands(program: Command) {
         }
 
         await unstake(options)
+        process.exit(0)
       } catch (error) {
         console.error(error)
+        process.exit(1)
       }
     })
 
