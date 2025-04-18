@@ -885,7 +885,8 @@ export function registerNodeCommands(program: Command) {
             nodeStatus === 'initializing' ||
             nodeStatus === 'standby' ||
             nodeStatus === 'syncing' ||
-            nodeStatus === 'active'
+            nodeStatus === 'active' ||
+            nodeStatus === 'ready'
           ) {
             throw 'Please stop your node before unstaking.'
           }
