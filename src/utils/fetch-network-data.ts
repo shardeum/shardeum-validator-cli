@@ -259,11 +259,9 @@ async function fetchNetworkStats(config: networkConfigType) {
 }
 
 export async function getNetworkParams(config: networkConfigType, description: ProcessDescription) {
-  let result = {}
-
   try {
     const networkStats = await fetchNetworkStats(config)
-    result = { ...networkStats }
+    let result = { ...networkStats }
 
     // Check if description is undefined
     if (!description) {
@@ -272,25 +270,16 @@ export async function getNetworkParams(config: networkConfigType, description: P
 
     const status: Pm2ProcessStatus = statusFromPM2(description)
     if (status?.status && status.status !== 'stopped') {
-      try {
-        const nodeLoad = await fetchNodeLoad(config)
-        result = { ...result, ...nodeLoad }
-      } catch (e) {
-        console.error('Failed to fetch node load:', e)
-      }
-
-      try {
-        const nodeTxStats = await fetchNodeTxStats(config)
-        result = { ...result, ...nodeTxStats }
-      } catch (e) {
-        console.error('Failed to fetch node transaction stats:', e)
-      }
+      const nodeLoad = await fetchNodeLoad(config)
+      const nodeTxStats = await fetchNodeTxStats(config)
+      result = { ...result, ...nodeLoad, ...nodeTxStats }
     }
     return result
   } catch (e) {
-    console.error('Error in getNetworkParams:', e)
-    return result || { error: 'Failed to fetch network parameters' }
+    console.error(e)
   }
+
+  return null
 }
 
 export async function fetchEOADetails(config: networkConfigType, eoaAddress: string) {
@@ -310,25 +299,15 @@ export async function fetchEOADetails(config: networkConfigType, eoaAddress: str
   return eoaParams?.account
 }
 export async function fetchUnstakeableDetails(config: networkConfigType, nominee: string, nominator: string) {
-  try {
-    const unstakable = await fetchDataFromNetwork<{
-      stakeUnlocked: {
-        unlocked: boolean
-        reason: string
-        remainingTime: number
-      }
-    }>(config, `/canUnstake/${nominee}/${nominator}`, (data) => data?.stakeUnlocked == null)
-
-    return unstakable?.stakeUnlocked
-  } catch (error) {
-    console.error('Error fetching unstakeable details:', error)
-    // Return default value if fetchDataFromNetwork fails
-    return {
-      unlocked: true,
-      reason: 'Network request failed, allowing unstake by default',
-      remainingTime: 0,
+  const unstakable = await fetchDataFromNetwork<{
+    stakeUnlocked: {
+      unlocked: boolean
+      reason: string
+      remainingTime: number
     }
-  }
+  }>(config, `/canUnstake/${nominee}/${nominator}`, (data) => data?.stakeUnlocked == null)
+
+  return unstakable?.stakeUnlocked
 }
 
 export async function fetchStakeableDetails(config: networkConfigType, nominee: string) {
