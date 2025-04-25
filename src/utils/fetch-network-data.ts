@@ -319,15 +319,23 @@ export async function fetchStakeableDetails(config: networkConfigType, nominee: 
     }
   }
   
-  const stakeable = await fetchDataFromNetwork<{
-    stakeAllowed: {
-      restakeAllowed: boolean
-      reason: string
-      remainingTime: number
-    }
-  }>(config, `/canStake/${nominee}`, (data) => data?.error != 'account not found' && data?.stakeAllowed == null)
+  try {
+    const stakeable = await fetchDataFromNetwork<{
+      stakeAllowed: {
+        restakeAllowed: boolean
+        reason: string
+        remainingTime: number
+      }
+    }>(config, `/canStake/${nominee}`, (data) => data?.error != 'account not found' && data?.stakeAllowed == null)
 
-  return stakeable?.stakeAllowed
+    return stakeable?.stakeAllowed
+  } catch (error) {
+    return {
+      restakeAllowed: true,
+      reason: 'Network request failed, allowing stake by default',
+      remainingTime: 0,
+    }
+  }
 }
 
 export async function fetchValidatorVersions(config: networkConfigType) {
