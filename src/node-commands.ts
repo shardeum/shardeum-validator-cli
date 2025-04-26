@@ -919,9 +919,6 @@ export function registerNodeCommands(program: Command) {
           process.exit(0)
         } else {
           console.log('Transaction sent (hash: ' + hash + ') but confirmation is taking longer than 20 seconds.')
-          console.log(
-            'The transaction may still complete successfully. Check your wallet or explorer in a few minutes.'
-          )
           console.log('Stake operation is still pending. Your SHM should stake within a few minutes.')
           process.exit(0)
         }
