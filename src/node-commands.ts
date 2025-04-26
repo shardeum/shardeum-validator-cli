@@ -442,7 +442,6 @@ async function unstake(options: { force?: boolean; ignoreRateLimit?: boolean }) 
       throw new Error('Unstake transaction failed. Try again later or use --ignoreRateLimit option.')
     }
   } catch (error) {
-    console.error(error)
     if (lastFailedUnstakeAttempt === null) {
       lastFailedUnstakeAttempt = Date.now()
     }
