@@ -333,9 +333,42 @@ async function executeUnstakeTransaction(walletWithProvider: ethers.Wallet, txDe
   const { hash, data, wait } = await walletWithProvider.sendTransaction(txDetails)
   addUnstakeToFile(Date.now(), hash)
   console.log('TX RECEIPT: ', { hash, data })
-  const txConfirmation = await wait()
+
   console.log('TX CONFIRMED: ', txConfirmation)
-  return txConfirmation
+  const timeoutPromise = new Promise<'timeout'>((resolve) => {
+    setTimeout(() => {
+      resolve('timeout')
+    }, 20000) // 20 seconds timeout
+  })
+
+  type ConfirmedResult = {
+    type: 'confirmed'
+    receipt: ethers.providers.TransactionReceipt
+  }
+
+  type TimeoutResult = {
+    type: 'timeout'
+    hash: string
+  }
+
+  type RaceResult = ConfirmedResult | TimeoutResult
+
+  const result = await Promise.race<RaceResult>([
+    wait().then((receipt) => ({ type: 'confirmed', receipt } as ConfirmedResult)),
+    timeoutPromise.then(() => ({ type: 'timeout', hash } as TimeoutResult)),
+  ])
+
+  if (result.type === 'confirmed') {
+    console.log('TX CONFIRMED: ', result.receipt)
+    return result.receipt
+  } else {
+    console.log('Transaction sent (hash: ' + hash + ') but confirmation is taking longer than 20 seconds.')
+    console.log('The transaction may still complete successfully. Check your wallet or explorer in a few minutes.')
+    return {
+      transactionHash: hash,
+      status: 'pending',
+    } as any
+  }
 }
 
 async function unstake(options: { force?: boolean; ignoreRateLimit?: boolean }) {
@@ -848,12 +881,43 @@ export function registerNodeCommands(program: Command) {
         }
 
         const { hash, data, wait } = await walletWithProvider.sendTransaction(txDetails)
-
         console.log('TX RECEIPT: ', { hash, data })
-        const txConfirmation = await wait()
-        console.log('TX CONFRIMED: ', txConfirmation)
+
+        const timeoutPromise = new Promise<'timeout'>((resolve) => {
+          setTimeout(() => {
+            resolve('timeout')
+          }, 20000) // 20 seconds timeout
+        })
+
+        type ConfirmedResult = {
+          type: 'confirmed'
+          receipt: ethers.providers.TransactionReceipt
+        }
+
+        type TimeoutResult = {
+          type: 'timeout'
+          hash: string
+        }
+
+        type RaceResult = ConfirmedResult | TimeoutResult
+
+        const result = await Promise.race<RaceResult>([
+          wait().then((receipt) => ({ type: 'confirmed', receipt } as ConfirmedResult)),
+          timeoutPromise.then(() => ({ type: 'timeout', hash } as TimeoutResult)),
+        ])
+
+        if (result.type === 'confirmed') {
+          console.log('TX CONFIRMED: ', result.receipt)
+          console.log('Stake successful!')
+        } else {
+          console.log('Transaction sent (hash: ' + hash + ') but confirmation is taking longer than 20 seconds.')
+          console.log(
+            'The transaction may still complete successfully. Check your wallet or explorer in a few minutes.'
+          )
+          console.log('Stake operation is still pending. Your SHM should stake within a few minutes.')
+        }
       } catch (error) {
-        console.error(error)
+        console.error('Failed to stake:', error)
       }
     })
 
@@ -892,7 +956,16 @@ export function registerNodeCommands(program: Command) {
           }
         }
 
-        await unstake(options)
+        const result = await unstake(options)
+
+        if (result) {
+          console.log('Unstake completed successfully.')
+        } else {
+          console.log(
+            'Unstake operation is still pending. Please try again if your SHM does not unstake after 2 minutes.'
+          )
+        }
+
         process.exit(0)
       } catch (error) {
         console.error(error)
