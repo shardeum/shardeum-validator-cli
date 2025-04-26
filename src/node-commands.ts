@@ -334,7 +334,6 @@ async function executeUnstakeTransaction(walletWithProvider: ethers.Wallet, txDe
   addUnstakeToFile(Date.now(), hash)
   console.log('TX RECEIPT: ', { hash, data })
 
-  console.log('TX CONFIRMED: ', txConfirmation)
   const timeoutPromise = new Promise<'timeout'>((resolve) => {
     setTimeout(() => {
       resolve('timeout')
