@@ -366,7 +366,6 @@ async function executeUnstakeTransaction(walletWithProvider: ethers.Wallet, txDe
     } as any
   } else {
     console.log('Transaction sent (hash: ' + hash + ') but confirmation is taking longer than 20 seconds.')
-    console.log('The transaction may still complete successfully. Check your wallet or explorer in a few minutes.')
     return {
       transactionHash: hash,
       status: 'pending',
