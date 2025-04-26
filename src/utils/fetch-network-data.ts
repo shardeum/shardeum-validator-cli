@@ -49,9 +49,7 @@ async function fetchDataFromNetwork<T>(
   callback: (response: { [id: string]: string } | null) => boolean
 ): Promise<T | null> {
   let retries = 5
-  if (!readActiveNode()) {
-    await getNewActiveNode(config)
-  }
+  await getNewActiveNode(config)
 
   if (!savedActiveNode) {
     throw new Error('Unable to fetch active node')
@@ -126,7 +124,7 @@ async function fetchDataFromNetwork<T>(
 export async function getNewActiveNode(config: networkConfigType): Promise<void> {
   const randomArchiver =
     config.server.p2p.existingArchivers[Math.floor(Math.random() * config.server.p2p.existingArchivers.length)]
-  const archiverUrl = `http://${randomArchiver.ip}:${randomArchiver.port}/nodelist`
+  const archiverUrl = `http://${randomArchiver.ip}:${randomArchiver.port}/nodelist?activeOnly=true`
   const nodeList = await axios
     .get(archiverUrl, { timeout: 2000 })
     .then((res) => res.data)
