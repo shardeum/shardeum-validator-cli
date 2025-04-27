@@ -7,7 +7,7 @@ import fs from 'fs'
 import path from 'path'
 import tcache from './tcache'
 import { File } from '../utils'
-import { fetchActiveNodes, robustQuery } from './robust-query'
+import { fetchActiveNodes, robustApiCall } from './robust-query'
 
 export const cache = new tcache()
 export const networkAccount = '1000000000000000000000000000000000000000000000000000000000000001'
@@ -123,29 +123,19 @@ async function fetchDataFromNetwork<T>(
  * @throws {Error} If unable to fetch list of nodes in the network
  */
 export async function getNewActiveNode(config: networkConfigType): Promise<void> {
-  // Pick a random archiver
   const randomArchiver =
     config.server.p2p.existingArchivers[Math.floor(Math.random() * config.server.p2p.existingArchivers.length)]
-
-  // Use activeOnly=true to only get active nodes
   const archiverUrl = `http://${randomArchiver.ip}:${randomArchiver.port}/nodelist?activeOnly=true`
-
   const nodeList = await axios
     .get(archiverUrl, { timeout: 2000 })
     .then((res) => res.data)
-    .catch((err) => {
-      console.error('Error fetching from archiver:', err)
-      return null
-    })
-
-  if (!nodeList?.nodeList || nodeList.nodeList.length === 0) {
-    throw new Error('Unable to fetch active nodes from the network')
+    .catch((err) => console.error(err))
+  if (!nodeList?.nodeList) {
+    throw new Error('Unable to fetch list of nodes in the network')
   }
-
-  // Pick a random active node
   savedActiveNode = nodeList.nodeList[Math.floor(Math.random() * nodeList.nodeList.length)]
 
-  // Write savedActiveNode to file
+  //Write savedActiveNode to file
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   fs.writeFileSync(path.join(__dirname, `../../${File.ACTIVE_NODE}`), JSON.stringify(savedActiveNode))
 }
@@ -460,52 +450,26 @@ export async function fetchGenesisStatus(config: networkConfigType, pubKey: stri
   return genesisStatus?.success || false
 }
 
-/**
- * Fetches data from the network using robust query
- * Uses consensus from multiple nodes for more reliable data
- *
- * @param config Network configuration
- * @param endpoint API endpoint to call
- * @param callback Function to validate the response
- * @returns The response data or null
- */
 export async function robustFetchDataFromNetwork<T>(
   config: networkConfigType,
   endpoint: string,
   callback: (response: { [id: string]: string } | null) => boolean
 ): Promise<T | null> {
   try {
-    // Get active nodes from a single archiver (the simple way)
-    const activeNodes = await fetchActiveNodes(config)
+    // Try the robust api call first
+    const result = await robustApiCall<T>(config, endpoint)
 
-    if (activeNodes.length === 0) {
-      // Fall back to traditional method if no active nodes are found
-      return fetchDataFromNetwork<T>(config, endpoint, callback)
+    // Validate the result with the callback
+    if (result && !callback(result as any)) {
+      return result
     }
 
-    // Create query function for robust query
-    const queryFn = async (node: { ip: string; port: number | string }) => {
-      const url = `http://${node.ip}:${node.port}${endpoint}`
-      const response = await axios.get(url, { timeout: 3000 })
-      return response.data
-    }
-
-    // Calculate required redundancy (minimum 2 nodes or half of available nodes)
-    const redundancy = Math.min(Math.max(2, Math.floor(activeNodes.length / 2)), activeNodes.length)
-
-    // Perform robust query
-    const result = await robustQuery(activeNodes, queryFn, redundancy)
-
-    if (result && !callback(result.value as any)) {
-      return result.value as T
-    }
-
-    // If robust query fails or callback validation fails, fall back to traditional method
+    // If robust call fails or callback validation fails, fall back to traditional method
     return fetchDataFromNetwork<T>(config, endpoint, callback)
   } catch (error) {
     console.error(`Error in robustFetchDataFromNetwork for ${endpoint}:`, error)
 
-    // Fall back to traditional method on error
+    // Fall back to traditional method
     return fetchDataFromNetwork<T>(config, endpoint, callback)
   }
 }

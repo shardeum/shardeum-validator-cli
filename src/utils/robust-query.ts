@@ -235,6 +235,63 @@ export async function robustQuery<T>(
 }
 
 /**
+ * Get active nodes from multiple archivers and use robust querying
+ * @param config Network configuration
+ * @returns Array of active nodes
+ */
+export async function fetchActiveNodes(
+  config: networkConfigType
+): Promise<Array<{ ip: string; port: number | string; id?: string; publicKey?: string }>> {
+  // Filter out archivers with invalid IPs
+  const validArchivers = config.server.p2p.existingArchivers.filter((archiver) => isIP(archiver.ip))
+
+  if (validArchivers.length === 0) {
+    throw new Error('No valid archivers available')
+  }
+
+  // Create query function for fetching active nodes
+  const queryFn = async (archiver: { ip: string; port: number | string }) => {
+    try {
+      const response = await axios.get(`http://${archiver.ip}:${archiver.port}/nodelist?activeOnly=true`, {
+        timeout: 2000,
+      })
+      if (response.data?.nodeList && Array.isArray(response.data.nodeList)) {
+        return response.data.nodeList
+      }
+      return []
+    } catch (error) {
+      throw error instanceof Error ? error : new Error(String(error))
+    }
+  }
+
+  // Use our robust query
+  const redundancy = Math.min(validArchivers.length, 2) // At least 2 archivers should agree, or all if less than 2
+  try {
+    const result = await robustQuery(validArchivers, queryFn, redundancy)
+
+    if (result && Array.isArray(result.value)) {
+      return result.value
+    }
+
+    // Fallback to direct query if robust query fails
+    for (const archiver of validArchivers) {
+      try {
+        const nodes = await queryFn(archiver)
+        if (nodes.length > 0) {
+          return nodes
+        }
+      } catch (error) {
+        continue
+      }
+    }
+  } catch (error) {
+    console.error(`Error in fetchActiveNodes: ${error}`)
+  }
+
+  return []
+}
+
+/**
  * Make a robust API call to multiple nodes
  * @param config Network configuration
  * @param endpoint API endpoint to call
@@ -294,33 +351,4 @@ export async function robustApiCall<T>(
   }
 
   return null
-}
-
-export async function fetchActiveNodes(config: networkConfigType): Promise<Array<{ip: string, port: number | string, id?: string, publicKey?: string}>> {
-  // Filter out archivers with invalid IPs
-  const validArchivers = config.server.p2p.existingArchivers.filter(archiver => isIP(archiver.ip))
-  
-  if (validArchivers.length === 0) {
-    throw new Error('No valid archivers available')
-  }
-
-  // Randomly select an archiver
-  const randomArchiver = validArchivers[Math.floor(Math.random() * validArchivers.length)]
-  
-  try {
-    // Get active nodes from this archiver
-    const response = await axios.get(
-      `http://${randomArchiver.ip}:${randomArchiver.port}/nodelist?activeOnly=true`, 
-      { timeout: 2000 }
-    )
-    
-    if (response.data?.nodeList && Array.isArray(response.data.nodeList)) {
-      return response.data.nodeList
-    }
-    
-    return []
-  } catch (error) {
-    console.error(`Error fetching active nodes from archiver ${randomArchiver.ip}:${randomArchiver.port}:`, error)
-    return []
-  }
 }
