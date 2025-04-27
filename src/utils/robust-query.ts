@@ -264,45 +264,24 @@ export async function fetchActiveNodes(
     throw new Error('No valid archivers available')
   }
 
-  // Create query function for fetching active nodes
-  const queryFn = async (archiver: { ip: string; port: number | string }) => {
+  // Try to fetch nodes from each archiver
+  for (const archiver of validArchivers) {
     try {
       const response = await axios.get(`http://${archiver.ip}:${archiver.port}/nodelist?activeOnly=true`, {
         timeout: 2000,
       })
-      if (response.data?.nodeList && Array.isArray(response.data.nodeList)) {
+
+      if (response.data?.nodeList && Array.isArray(response.data.nodeList) && response.data.nodeList.length > 0) {
         return response.data.nodeList
       }
-      return []
     } catch (error) {
-      throw error instanceof Error ? error : new Error(String(error))
+      // Continue to the next archiver if this one fails
+      console.error(`Failed to fetch nodes from archiver ${archiver.ip}:${archiver.port}`)
     }
   }
 
-  // Use robust query to get consensus on active nodes
-  const redundancy = Math.min(validArchivers.length, 2)
-  try {
-    const result = await robustQuery(validArchivers, queryFn, redundancy)
-
-    if (result && Array.isArray(result.value)) {
-      return result.value
-    }
-
-    // Fallback to direct query if robust query fails
-    for (const archiver of validArchivers) {
-      try {
-        const nodes = await queryFn(archiver)
-        if (nodes.length > 0) {
-          return nodes
-        }
-      } catch (error) {
-        continue
-      }
-    }
-  } catch (error) {
-    console.error(`Error in fetchActiveNodes: ${error instanceof Error ? error.message : String(error)}`)
-  }
-
+  // If we couldn't get a list from any archiver
+  console.error('Could not fetch active nodes from any archiver')
   return []
 }
 
