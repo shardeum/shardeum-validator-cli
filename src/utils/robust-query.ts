@@ -323,12 +323,55 @@ export async function makeRobustQueryCall<T>(
     }
   }
 
+  // Create a custom equality function that ignores remainingTime for stake/unstake endpoints
+  const customEqualityFn = (a: T, b: T): boolean => {
+    // For stake/unstake endpoints, ignore remainingTime when comparing responses
+    if (endpointName.includes('/canStake/') || endpointName.includes('/canUnstake/')) {
+      try {
+        // Create deep copies without remainingTime for comparison
+        const aCopy = JSON.parse(JSON.stringify(a))
+        const bCopy = JSON.parse(JSON.stringify(b))
+
+        // Remove remainingTime from stakeAllowed
+        if (aCopy?.stakeAllowed?.remainingTime !== undefined) {
+          delete aCopy.stakeAllowed.remainingTime
+        }
+        if (bCopy?.stakeAllowed?.remainingTime !== undefined) {
+          delete bCopy.stakeAllowed.remainingTime
+        }
+
+        // Remove remainingTime from stakeUnlocked
+        if (aCopy?.stakeUnlocked?.remainingTime !== undefined) {
+          delete aCopy.stakeUnlocked.remainingTime
+        }
+        if (bCopy?.stakeUnlocked?.remainingTime !== undefined) {
+          delete bCopy.stakeUnlocked.remainingTime
+        }
+
+        return JSON.stringify(aCopy) === JSON.stringify(bCopy)
+      } catch (e) {
+        // If JSON parsing fails, fall back to direct comparison
+        return JSON.stringify(a) === JSON.stringify(b)
+      }
+    }
+
+    // For other endpoints, use default comparison
+    try {
+      return JSON.stringify(a) === JSON.stringify(b)
+    } catch (e) {
+      return a === b
+    }
+  }
+
   const logPrefix = `robust-query-${endpointName}`
 
   try {
     const redundancy = Math.min(Math.max(2, Math.floor(nodes.length / 2)), nodes.length)
 
-    const robustResult = await attempt(() => robustQuery(nodes, queryFn, redundancy), { maxRetries: 3, logPrefix })
+    const robustResult = await attempt(() => robustQuery(nodes, queryFn, redundancy, customEqualityFn), {
+      maxRetries: 3,
+      logPrefix,
+    })
 
     if (!robustResult || robustResult.count < Math.min(redundancy, nodes.length)) {
       throw new Error(
