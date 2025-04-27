@@ -375,9 +375,7 @@ export async function fetchStakeableDetails(config: networkConfigType, nominee: 
         remainingTime: 0,
       }
     }
-  }>(config, `/canStake/${nominee}`, (data) => data?.error != 'account not found' && data?.stakeAllowed == null)
-
-  return stakeable?.stakeAllowed
+  }
 }
 
 export async function fetchValidatorVersions(config: networkConfigType) {
