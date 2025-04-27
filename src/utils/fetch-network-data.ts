@@ -7,7 +7,6 @@ import fs from 'fs'
 import path from 'path'
 import tcache from './tcache'
 import { File } from '../utils'
-import { fetchActiveNodes, robustApiCall } from './robust-query'
 
 export const cache = new tcache()
 export const networkAccount = '1000000000000000000000000000000000000000000000000000000000000001'
@@ -166,7 +165,7 @@ export async function fetchInitialParameters(
     }
   }
 
-  const initialParams: InitialParameters | null = await robustFetchDataFromNetwork(
+  const initialParams: InitialParameters | null = await fetchDataFromNetwork(
     config,
     `/account/${networkAccount}?type=5`,
     (data) => data?.account == null
@@ -249,7 +248,7 @@ export async function fetchNodeInfo(config: networkConfigType) {
 }
 
 async function fetchNetworkStats(config: networkConfigType) {
-  const networkStats = await robustFetchDataFromNetwork(config, '/network-stats', (data) => data == null)
+  const networkStats = await fetchDataFromNetwork(config, '/network-stats', (data) => data == null)
 
   if (networkStats == null) {
     throw new Error('Unable to fetch network-stats')
@@ -282,7 +281,7 @@ export async function getNetworkParams(config: networkConfigType, description: P
 }
 
 export async function fetchEOADetails(config: networkConfigType, eoaAddress: string) {
-  const eoaParams = await robustFetchDataFromNetwork<{
+  const eoaParams = await fetchDataFromNetwork<{
     account: {
       data: unknown
       operatorAccountInfo: {
@@ -297,9 +296,8 @@ export async function fetchEOADetails(config: networkConfigType, eoaAddress: str
 
   return eoaParams?.account
 }
-
 export async function fetchUnstakeableDetails(config: networkConfigType, nominee: string, nominator: string) {
-  const unstakable = await robustFetchDataFromNetwork<{
+  const unstakable = await fetchDataFromNetwork<{
     stakeUnlocked: {
       unlocked: boolean
       reason: string
@@ -318,9 +316,9 @@ export async function fetchStakeableDetails(config: networkConfigType, nominee: 
       remainingTime: 0,
     }
   }
-
+  
   try {
-    const stakeable = await robustFetchDataFromNetwork<{
+    const stakeable = await fetchDataFromNetwork<{
       stakeAllowed: {
         restakeAllowed: boolean
         reason: string
@@ -339,7 +337,7 @@ export async function fetchStakeableDetails(config: networkConfigType, nominee: 
 }
 
 export async function fetchValidatorVersions(config: networkConfigType) {
-  const validatorVersions = await robustFetchDataFromNetwork<{
+  const validatorVersions = await fetchDataFromNetwork<{
     nodeInfo: {
       appData: {
         minVersion: string
@@ -416,7 +414,7 @@ export async function fetchStakeParameters(config: networkConfigType) {
     }
   }
 
-  const stakeParams = await robustFetchDataFromNetwork<{
+  const stakeParams = await fetchDataFromNetwork<{
     stakeRequired: { value: string }
   }>(config, '/stake', (data) => !data)
   if (!stakeParams) {
@@ -431,7 +429,7 @@ export async function fetchStakeParameters(config: networkConfigType) {
 }
 
 export async function fetchCycleDuration(config: networkConfigType) {
-  const latestCycle = await robustFetchDataFromNetwork<{
+  const latestCycle = await fetchDataFromNetwork<{
     newestCycle: { duration: number }
   }>(config, '/sync-newest-cycle', (data) => !data)
   if (!latestCycle) {
@@ -442,34 +440,10 @@ export async function fetchCycleDuration(config: networkConfigType) {
 }
 
 export async function fetchGenesisStatus(config: networkConfigType, pubKey: string) {
-  const genesisStatus = await robustFetchDataFromNetwork<{
+  const genesisStatus = await fetchDataFromNetwork<{
     success: boolean
     reason: string
   }>(config, `/is-genesis-node/${pubKey}`, (data) => !data)
 
   return genesisStatus?.success || false
-}
-
-export async function robustFetchDataFromNetwork<T>(
-  config: networkConfigType,
-  endpoint: string,
-  callback: (response: { [id: string]: string } | null) => boolean
-): Promise<T | null> {
-  try {
-    // Try the robust api call first
-    const result = await robustApiCall<T>(config, endpoint)
-
-    // Validate the result with the callback
-    if (result && !callback(result as any)) {
-      return result
-    }
-
-    // If robust call fails or callback validation fails, fall back to traditional method
-    return fetchDataFromNetwork<T>(config, endpoint, callback)
-  } catch (error) {
-    console.error(`Error in robustFetchDataFromNetwork for ${endpoint}:`, error)
-
-    // Fall back to traditional method
-    return fetchDataFromNetwork<T>(config, endpoint, callback)
-  }
 }
