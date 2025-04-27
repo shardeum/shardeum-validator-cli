@@ -318,7 +318,6 @@ export async function fetchUnstakeableDetails(config: networkConfigType, nominee
 
     return unstakable.value?.stakeUnlocked
   } catch (error) {
-
     return fetchDataFromNetwork<{
       stakeUnlocked: {
         unlocked: boolean
@@ -359,7 +358,6 @@ export async function fetchStakeableDetails(config: networkConfigType, nominee: 
 
     return stakeable.value?.stakeAllowed
   } catch (error) {
-
     try {
       const stakeable = await fetchDataFromNetwork<{
         stakeAllowed: {
