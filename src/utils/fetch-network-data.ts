@@ -339,48 +339,43 @@ export async function fetchStakeableDetails(config: networkConfigType, nominee: 
     }
   }
 
-  return {
-    restakeAllowed: true,
-    reason: 'Network request failed, allowing stake by default',
-    remainingTime: 0,
+  try {
+    // Get active nodes
+    const activeNodes = await fetchActiveNodes(config)
+
+    if (activeNodes.length === 0) {
+      throw new Error('No active nodes available')
+    }
+
+    // Make robust query call
+    const stakeable = await makeRobustQueryCall<{
+      stakeAllowed: {
+        restakeAllowed: boolean
+        reason: string
+        remainingTime: number
+      }
+    }>(activeNodes, `/canStake/${nominee}`)
+
+    return stakeable.value?.stakeAllowed
+  } catch (error) {
+    try {
+      const stakeable = await fetchDataFromNetwork<{
+        stakeAllowed: {
+          restakeAllowed: boolean
+          reason: string
+          remainingTime: number
+        }
+      }>(config, `/canStake/${nominee}`, (data) => data?.error != 'account not found' && data?.stakeAllowed == null)
+
+      return stakeable?.stakeAllowed
+    } catch (error) {
+      return {
+        restakeAllowed: true,
+        reason: 'Network request failed, allowing stake by default',
+        remainingTime: 0,
+      }
+    }
   }
-  // try {
-  //   // Get active nodes
-  //   const activeNodes = await fetchActiveNodes(config)
-
-  //   if (activeNodes.length === 0) {
-  //     throw new Error('No active nodes available')
-  //   }
-
-  //   // Make robust query call
-  //   const stakeable = await makeRobustQueryCall<{
-  //     stakeAllowed: {
-  //       restakeAllowed: boolean
-  //       reason: string
-  //       remainingTime: number
-  //     }
-  //   }>(activeNodes, `/canStake/${nominee}`)
-
-  //   return stakeable.value?.stakeAllowed
-  // } catch (error) {
-  //   try {
-  //     const stakeable = await fetchDataFromNetwork<{
-  //       stakeAllowed: {
-  //         restakeAllowed: boolean
-  //         reason: string
-  //         remainingTime: number
-  //       }
-  //     }>(config, `/canStake/${nominee}`, (data) => data?.error != 'account not found' && data?.stakeAllowed == null)
-
-  //     return stakeable?.stakeAllowed
-  //   } catch (error) {
-  //     return {
-  //       restakeAllowed: true,
-  //       reason: 'Network request failed, allowing stake by default',
-  //       remainingTime: 0,
-  //     }
-  //   }
-  // }
 }
 
 export async function fetchValidatorVersions(config: networkConfigType) {
