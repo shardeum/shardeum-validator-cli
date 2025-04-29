@@ -333,9 +333,44 @@ async function executeUnstakeTransaction(walletWithProvider: ethers.Wallet, txDe
   const { hash, data, wait } = await walletWithProvider.sendTransaction(txDetails)
   addUnstakeToFile(Date.now(), hash)
   console.log('TX RECEIPT: ', { hash, data })
-  const txConfirmation = await wait()
-  console.log('TX CONFIRMED: ', txConfirmation)
-  return txConfirmation
+
+  const timeoutPromise = new Promise<'timeout'>((resolve) => {
+    setTimeout(() => {
+      resolve('timeout')
+    }, 20000) // 20 seconds timeout
+  })
+
+  type ConfirmedResult = {
+    type: 'confirmed'
+    receipt: ethers.providers.TransactionReceipt
+  }
+
+  type TimeoutResult = {
+    type: 'timeout'
+    hash: string
+  }
+
+  type RaceResult = ConfirmedResult | TimeoutResult
+
+  const result = await Promise.race<RaceResult>([
+    wait().then((receipt) => ({ type: 'confirmed', receipt } as ConfirmedResult)),
+    timeoutPromise.then(() => ({ type: 'timeout', hash } as TimeoutResult)),
+  ])
+
+  if (result.type === 'confirmed') {
+    console.log('TX CONFIRMED: ', result.receipt)
+    return {
+      transactionHash: result.receipt.transactionHash,
+      status: 'confirmed',
+      receipt: result.receipt,
+    } as any
+  } else {
+    console.log('Transaction sent (hash: ' + hash + ') but confirmation is taking longer than 20 seconds.')
+    return {
+      transactionHash: hash,
+      status: 'pending',
+    } as any
+  }
 }
 
 async function unstake(options: { force?: boolean; ignoreRateLimit?: boolean }) {
@@ -390,20 +425,26 @@ async function unstake(options: { force?: boolean; ignoreRateLimit?: boolean }) 
     console.log('Sending unstake transaction...')
     try {
       const confirmation = await executeUnstakeTransaction(walletWithProvider, txDetails)
-      console.log('Unstake successful!', confirmation.transactionHash)
-      // Clean up unstake file
-      removeUnstakeFile()
-      return true
+
+      if (confirmation.status === 'confirmed') {
+        console.log('Unstake successful!', confirmation.transactionHash)
+        // Clean up unstake file
+        removeUnstakeFile()
+        return { success: true, pending: false }
+      } else if (confirmation.status === 'pending') {
+        return { success: true, pending: true }
+      } else {
+        return { success: true, pending: true }
+      }
     } catch (error) {
       console.error('Failed to execute unstake transaction:', error)
       throw new Error('Unstake transaction failed. Try again later or use --ignoreRateLimit option.')
     }
   } catch (error) {
-    console.error(error)
     if (lastFailedUnstakeAttempt === null) {
       lastFailedUnstakeAttempt = Date.now()
     }
-    return false
+    return { success: false, error }
   }
 }
 
@@ -769,57 +810,55 @@ export function registerNodeCommands(program: Command) {
     .argument('<value>', 'The amount of SHM to stake')
     .description('Stake the set amount of SHM at the stake address. Rewards will be sent to set reward address.')
     .action(async (stakeValue) => {
-      // Fetch the public key from secrets.json
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
-      if (!fs.existsSync(path.join(__dirname, `../${File.SECRETS}`))) {
-        console.error('Please start the node once before staking')
-        return
-      }
-
-      const secrets = JSON.parse(
-        // eslint-disable-next-line security/detect-non-literal-fs-filename
-        fs.readFileSync(path.join(__dirname, `../${File.SECRETS}`)).toString()
-      )
-
-      if (secrets.publicKey == null) {
-        console.error('Unable to find public key in secrets.json')
-        return
-      }
-
-      // Check if staking is allowed
-      const stakeable = await fetchStakeableDetails(config, secrets.publicKey)
-      if (!stakeable?.restakeAllowed && stakeable?.remainingTime != null) {
-        const minutes = Math.floor(stakeable.remainingTime / 60000)
-        const seconds = Math.floor((stakeable.remainingTime % 60000) / 1000)
-        console.error(`Your last stake action was too recent. Please wait ${minutes}m ${seconds}s to stake again.`)
-        return
-      }
-
-      // Take input from user for PRIVATE KEY
-      let privateKey = await getUserInput('Please enter your private key: ')
-      while (privateKey.length !== 64 || !isValidPrivate(Buffer.from(privateKey, 'hex'))) {
-        console.log('Invalid private key entered.')
-        privateKey = await getUserInput('Please enter your private key: ')
-      }
-
-      const provider = new ethers.providers.JsonRpcProvider(rpcServer.url)
-
-      const walletWithProvider = new ethers.Wallet(privateKey, provider)
-
-      const [{ stakeRequired }, eoaData] = await Promise.all([
-        fetchStakeParameters(config),
-        fetchEOADetails(config, walletWithProvider.address),
-      ])
-
-      if (ethers.BigNumber.from(stakeRequired).gt(ethers.utils.parseEther(stakeValue))) {
-        if (eoaData == null) {
-          /*prettier-ignore*/
-          console.error(`Stake amount must be greater than ${ethers.utils.formatEther(stakeRequired)} SHM`);
-          return
-        }
-      }
-
       try {
+        if (!fs.existsSync(path.join(__dirname, `../${File.SECRETS}`))) {
+          console.error('Please start the node once before staking')
+          process.exit(1)
+        }
+
+        const secrets = JSON.parse(
+          // eslint-disable-next-line security/detect-non-literal-fs-filename
+          fs.readFileSync(path.join(__dirname, `../${File.SECRETS}`)).toString()
+        )
+
+        if (secrets.publicKey == null) {
+          console.error('Unable to find public key in secrets.json')
+          process.exit(1)
+        }
+
+        // Check if staking is allowed
+        const stakeable = await fetchStakeableDetails(config, secrets.publicKey)
+        if (!stakeable?.restakeAllowed && stakeable?.remainingTime != null) {
+          const minutes = Math.floor(stakeable.remainingTime / 60000)
+          const seconds = Math.floor((stakeable.remainingTime % 60000) / 1000)
+          console.error(`Your last stake action was too recent. Please wait ${minutes}m ${seconds}s to stake again.`)
+          process.exit(1)
+        }
+
+        // Take input from user for PRIVATE KEY
+        let privateKey = await getUserInput('Please enter your private key: ')
+        while (privateKey.length !== 64 || !isValidPrivate(Buffer.from(privateKey, 'hex'))) {
+          console.log('Invalid private key entered.')
+          privateKey = await getUserInput('Please enter your private key: ')
+        }
+
+        const provider = new ethers.providers.JsonRpcProvider(rpcServer.url)
+
+        const walletWithProvider = new ethers.Wallet(privateKey, provider)
+
+        const [{ stakeRequired }, eoaData] = await Promise.all([
+          fetchStakeParameters(config),
+          fetchEOADetails(config, walletWithProvider.address),
+        ])
+
+        if (ethers.BigNumber.from(stakeRequired).gt(ethers.utils.parseEther(stakeValue))) {
+          if (eoaData == null) {
+            /*prettier-ignore*/
+            console.error(`Stake amount must be greater than ${ethers.utils.formatEther(stakeRequired)} SHM`);
+            process.exit(1)
+          }
+        }
+
         const [gasPrice, from, nonce] = await Promise.all([
           walletWithProvider.getGasPrice(),
           walletWithProvider.getAddress(),
@@ -848,12 +887,43 @@ export function registerNodeCommands(program: Command) {
         }
 
         const { hash, data, wait } = await walletWithProvider.sendTransaction(txDetails)
-
         console.log('TX RECEIPT: ', { hash, data })
-        const txConfirmation = await wait()
-        console.log('TX CONFRIMED: ', txConfirmation)
+
+        const timeoutPromise = new Promise<'timeout'>((resolve) => {
+          setTimeout(() => {
+            resolve('timeout')
+          }, 20000) // 20 seconds timeout
+        })
+
+        type ConfirmedResult = {
+          type: 'confirmed'
+          receipt: ethers.providers.TransactionReceipt
+        }
+
+        type TimeoutResult = {
+          type: 'timeout'
+          hash: string
+        }
+
+        type RaceResult = ConfirmedResult | TimeoutResult
+
+        const result = await Promise.race<RaceResult>([
+          wait().then((receipt) => ({ type: 'confirmed', receipt } as ConfirmedResult)),
+          timeoutPromise.then(() => ({ type: 'timeout', hash } as TimeoutResult)),
+        ])
+
+        if (result.type === 'confirmed') {
+          console.log('TX CONFIRMED: ', result.receipt)
+          console.log('Stake successful!')
+          process.exit(0)
+        } else {
+          console.log('Transaction sent (hash: ' + hash + ') but confirmation is taking longer than 20 seconds.')
+          console.log('Stake operation is still pending. Your SHM should stake within a few minutes.')
+          process.exit(0)
+        }
       } catch (error) {
-        console.error(error)
+        console.error('Failed to stake:', error)
+        process.exit(1)
       }
     })
 
@@ -871,7 +941,7 @@ export function registerNodeCommands(program: Command) {
           )
 
           if (answer.toLowerCase() !== 'y') {
-            return
+            process.exit(0)
           }
         } else {
           let nodeInfo
@@ -892,7 +962,21 @@ export function registerNodeCommands(program: Command) {
           }
         }
 
-        await unstake(options)
+        const result = await unstake(options)
+
+        if (result?.success) {
+          if (result.pending) {
+            console.log(
+              'Unstake operation is still pending. Please try again if your SHM does not unstake after 2 minutes.'
+            )
+          } else {
+            console.log('Unstake completed successfully.')
+          }
+        } else {
+          console.error(result?.error || 'Unstake operation failed with unknown error')
+          process.exit(1)
+        }
+
         process.exit(0)
       } catch (error) {
         console.error(error)

@@ -7,6 +7,7 @@ import fs from 'fs'
 import path from 'path'
 import tcache from './tcache'
 import { File } from '../utils'
+import { fetchActiveNodes, makeRobustQueryCall } from './robust-query'
 
 export const cache = new tcache()
 export const networkAccount = '1000000000000000000000000000000000000000000000000000000000000001'
@@ -49,9 +50,7 @@ async function fetchDataFromNetwork<T>(
   callback: (response: { [id: string]: string } | null) => boolean
 ): Promise<T | null> {
   let retries = 5
-  if (!readActiveNode()) {
-    await getNewActiveNode(config)
-  }
+  await getNewActiveNode(config)
 
   if (!savedActiveNode) {
     throw new Error('Unable to fetch active node')
@@ -126,7 +125,7 @@ async function fetchDataFromNetwork<T>(
 export async function getNewActiveNode(config: networkConfigType): Promise<void> {
   const randomArchiver =
     config.server.p2p.existingArchivers[Math.floor(Math.random() * config.server.p2p.existingArchivers.length)]
-  const archiverUrl = `http://${randomArchiver.ip}:${randomArchiver.port}/nodelist`
+  const archiverUrl = `http://${randomArchiver.ip}:${randomArchiver.port}/nodelist?activeOnly=true`
   const nodeList = await axios
     .get(archiverUrl, { timeout: 2000 })
     .then((res) => res.data)
@@ -298,16 +297,37 @@ export async function fetchEOADetails(config: networkConfigType, eoaAddress: str
 
   return eoaParams?.account
 }
-export async function fetchUnstakeableDetails(config: networkConfigType, nominee: string, nominator: string) {
-  const unstakable = await fetchDataFromNetwork<{
-    stakeUnlocked: {
-      unlocked: boolean
-      reason: string
-      remainingTime: number
-    }
-  }>(config, `/canUnstake/${nominee}/${nominator}`, (data) => data?.stakeUnlocked == null)
 
-  return unstakable?.stakeUnlocked
+export async function fetchUnstakeableDetails(config: networkConfigType, nominee: string, nominator: string) {
+  try {
+    // Get active nodes
+    const activeNodes = await fetchActiveNodes(config)
+
+    if (activeNodes.length === 0) {
+      throw new Error('No active nodes available')
+    }
+
+    // Make robust query call
+    const unstakable = await makeRobustQueryCall<{
+      stakeUnlocked: {
+        unlocked: boolean
+        reason: string
+        remainingTime: number
+      }
+    }>(activeNodes, `/canUnstake/${nominee}/${nominator}`)
+
+    return unstakable.value?.stakeUnlocked
+  } catch (error) {
+    return fetchDataFromNetwork<{
+      stakeUnlocked: {
+        unlocked: boolean
+        reason: string
+        remainingTime: number
+      }
+    }>(config, `/canUnstake/${nominee}/${nominator}`, (data) => data?.stakeUnlocked == null).then(
+      (response) => response?.stakeUnlocked
+    )
+  }
 }
 
 export async function fetchStakeableDetails(config: networkConfigType, nominee: string) {
@@ -318,16 +338,44 @@ export async function fetchStakeableDetails(config: networkConfigType, nominee: 
       remainingTime: 0,
     }
   }
-  
-  const stakeable = await fetchDataFromNetwork<{
-    stakeAllowed: {
-      restakeAllowed: boolean
-      reason: string
-      remainingTime: number
-    }
-  }>(config, `/canStake/${nominee}`, (data) => data?.error != 'account not found' && data?.stakeAllowed == null)
 
-  return stakeable?.stakeAllowed
+  try {
+    // Get active nodes
+    const activeNodes = await fetchActiveNodes(config)
+
+    if (activeNodes.length === 0) {
+      throw new Error('No active nodes available')
+    }
+
+    // Make robust query call
+    const stakeable = await makeRobustQueryCall<{
+      stakeAllowed: {
+        restakeAllowed: boolean
+        reason: string
+        remainingTime: number
+      }
+    }>(activeNodes, `/canStake/${nominee}`)
+
+    return stakeable.value?.stakeAllowed
+  } catch (error) {
+    try {
+      const stakeable = await fetchDataFromNetwork<{
+        stakeAllowed: {
+          restakeAllowed: boolean
+          reason: string
+          remainingTime: number
+        }
+      }>(config, `/canStake/${nominee}`, (data) => data?.error != 'account not found' && data?.stakeAllowed == null)
+
+      return stakeable?.stakeAllowed
+    } catch (error) {
+      return {
+        restakeAllowed: true,
+        reason: 'Network request failed, allowing stake by default',
+        remainingTime: 0,
+      }
+    }
+  }
 }
 
 export async function fetchValidatorVersions(config: networkConfigType) {
