@@ -2,6 +2,8 @@ import axios, { AxiosError } from 'axios'
 import { networkConfigType } from '../config/default-network-config'
 import { isIP } from 'net'
 
+const REQUEST_TIMEOUT_MS = 10000
+
 /**
  * Simple sleep utility
  */
@@ -267,8 +269,8 @@ export async function fetchActiveNodes(
   // Try to fetch nodes from each archiver
   for (const archiver of validArchivers) {
     try {
-      const response = await axios.get(`http://${archiver.ip}:${archiver.port}/nodelist?activeOnly=true`, {
-        timeout: 2000,
+      const response = await axios.get(`http://${archiver.ip}:${archiver.port}/full-nodelist?activeOnly=true`, {
+        timeout: REQUEST_TIMEOUT_MS,
       })
 
       if (response.data?.nodeList && Array.isArray(response.data.nodeList) && response.data.nodeList.length > 0) {
@@ -312,7 +314,7 @@ export async function makeRobustQueryCall<T>(
       const queryPart = queryStr ? `?${queryStr}` : ''
       const url = `http://${node.ip}:${node.port}${endpointName}${queryPart}`
 
-      const response = await axios.get(url, { timeout: 3000 })
+      const response = await axios.get(url, { timeout: REQUEST_TIMEOUT_MS })
       return response.data
     } catch (error) {
       if (error instanceof AxiosError && error.response) {
@@ -366,7 +368,7 @@ export async function makeRobustQueryCall<T>(
   const logPrefix = `robust-query-${endpointName}`
 
   try {
-    const redundancy = Math.min(Math.max(2, Math.floor(nodes.length / 2)), nodes.length)
+    const redundancy = 3
 
     const robustResult = await attempt(() => robustQuery(nodes, queryFn, redundancy, customEqualityFn), {
       maxRetries: 3,
