@@ -9,6 +9,8 @@ import tcache from './tcache'
 import { File } from '../utils'
 import { fetchActiveNodes, makeRobustQueryCall } from './robust-query'
 
+const REQUEST_TIMEOUT_MS = 10000
+
 export const cache = new tcache()
 export const networkAccount = '1000000000000000000000000000000000000000000000000000000000000001'
 let savedActiveNode:
@@ -62,7 +64,7 @@ async function fetchDataFromNetwork<T>(
   const url = `http://${savedActiveNode.ip}:${savedActiveNode.port}` + query
 
   try {
-    data = await axios.get(url, { timeout: 2000 })
+    data = await axios.get(url, { timeout: REQUEST_TIMEOUT_MS })
   } catch (e) {
     if (e instanceof AxiosError) {
       finalError = e
@@ -84,7 +86,7 @@ async function fetchDataFromNetwork<T>(
     const url = `http://${savedActiveNode.ip}:${savedActiveNode.port}` + query
 
     try {
-      data = await axios.get(url, { timeout: 2000 })
+      data = await axios.get(url, { timeout: REQUEST_TIMEOUT_MS })
     } catch (e) {
       if (e instanceof AxiosError) {
         finalError = e
@@ -127,7 +129,7 @@ export async function getNewActiveNode(config: networkConfigType): Promise<void>
     config.server.p2p.existingArchivers[Math.floor(Math.random() * config.server.p2p.existingArchivers.length)]
   const archiverUrl = `http://${randomArchiver.ip}:${randomArchiver.port}/nodelist?activeOnly=true`
   const nodeList = await axios
-    .get(archiverUrl, { timeout: 2000 })
+    .get(archiverUrl, { timeout: REQUEST_TIMEOUT_MS })
     .then((res) => res.data)
     .catch((err) => console.error(err))
   if (!nodeList?.nodeList) {
@@ -244,7 +246,7 @@ async function fetchNodeTxStats(config: networkConfigType) {
 export async function fetchNodeInfo(config: networkConfigType) {
   const url = `http://localhost:${config.server.ip.externalPort}/nodeinfo?reportIntermediateStatus=true`
   // const url = `http://localhost:${config.server.ip.externalPort}/nodeinfo`;
-  const response = await axios.get(url, { timeout: 2000 })
+  const response = await axios.get(url, { timeout: REQUEST_TIMEOUT_MS })
   return response.data.nodeInfo
 }
 
