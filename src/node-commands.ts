@@ -527,8 +527,8 @@ export function registerNodeCommands(program: Command) {
             }
           } else {
             unstakable = {
-              unlocked: true,
-              reason: 'Node has not been staked yet. Unstaking is allowed.',
+              unlocked: false,
+              reason: 'Node has not been staked yet. Unstaking is not possible.',
               remainingTime: 0,
             }
           }
