@@ -486,14 +486,6 @@ export function registerNodeCommands(program: Command) {
         ])
         // TODO: Use Promise.allSettled. Need to update nodeJs to 12.9
 
-        let nodeInfo
-        try {
-          nodeInfo = await fetchNodeInfo(config)
-        } catch (e) {
-          logger.error('Unable to fetch node info: ' + e)
-          nodeInfo = null
-        }
-
         let unstakable = {
           unlocked: false,
           reason: 'Could not fetch data',
@@ -506,8 +498,24 @@ export function registerNodeCommands(program: Command) {
           remainingTime: -1,
         }
 
-        const stakableData = await fetchStakeableDetails(config, publicKey)
-        stakeable = stakableData ?? stakeable
+        if (!accountInfo?.nominator) {
+          stakeable = {
+            restakeAllowed: true,
+            reason: 'Node has not been staked yet. Staking is allowed.',
+            remainingTime: 0,
+          }
+        } else {
+          const stakableData = await fetchStakeableDetails(config, publicKey)
+          stakeable = stakableData ?? stakeable
+        }
+
+        let nodeInfo
+        try {
+          nodeInfo = await fetchNodeInfo(config)
+        } catch (e) {
+          logger.error('Unable to fetch node info: ' + e)
+          nodeInfo = null
+        }
 
         if (descriptions.length === 0) {
           if (accountInfo.nominator) {
@@ -516,6 +524,12 @@ export function registerNodeCommands(program: Command) {
             if (eoaData) {
               const unstakableData = await fetchUnstakeableDetails(config, publicKey, accountInfo.nominator)
               unstakable = unstakableData ?? unstakable
+            }
+          } else {
+            unstakable = {
+              unlocked: false,
+              reason: 'Node has not been staked yet. Unstaking is not possible.',
+              remainingTime: 0,
             }
           }
 
@@ -531,7 +545,7 @@ export function registerNodeCommands(program: Command) {
               totalPenalty: accountInfo.totalPenalty ? ethers.utils.formatEther(accountInfo.totalPenalty) : '',
               autorestart: nodeConfig.autoRestart,
               stakeState: unstakable,
-              stakeable
+              stakeable,
             })
           )
           cache.writeMaps()
@@ -584,7 +598,7 @@ export function registerNodeCommands(program: Command) {
               autorestart: nodeConfig.autoRestart,
               nodeInfo: nodeInfo,
               stakeState: unstakable,
-              stakeable
+              stakeable,
               // TODO: Add fetching node info when in standby
             })
           )
@@ -615,7 +629,7 @@ export function registerNodeCommands(program: Command) {
             totalPenalty: accountInfo.totalPenalty ? ethers.utils.formatEther(accountInfo.totalPenalty) : '',
             autorestart: nodeConfig.autoRestart,
             stakeState: unstakable,
-            stakeable
+            stakeable,
           })
         )
         cache.writeMaps()
