@@ -40,6 +40,7 @@ import {
   fetchUnstakeableDetails,
   fetchGenesisStatus,
   fetchStakeableDetails,
+  fetchLatestImageDigest,
 } from './utils'
 import { BN, isValidPrivate, stripHexPrefix } from 'ethereumjs-util'
 import logger from './utils/logger'
@@ -63,6 +64,8 @@ type VersionStats = {
   runnningValidatorVersion?: string | undefined
   runningValidatorBranch?: string | undefined
   runningValidatorBranchCommitHash?: string | undefined
+  currentImageDigest?: string | undefined
+  latestImageDigest?: string | undefined
 }
 
 let config = defaultNetworkConfig
@@ -1028,6 +1031,9 @@ export function registerNodeCommands(program: Command) {
         throw new Error("Couldn't fetch validator versions")
       }
 
+      const currentImageDigest = process.env.IMAGE_DIGEST || ''
+      const latestImageDigest = await fetchLatestImageDigest()
+
       let versions: VersionStats = {
         runningCliVersion: dashboardPackageJson.version,
         runningCliBranch: await getBranchNameForCLI(),
@@ -1036,6 +1042,8 @@ export function registerNodeCommands(program: Command) {
         latestCliVersion: await getLatestCliVersion(),
         minShardeumVersion: validatorVersions.minVersion,
         activeShardeumVersion: validatorVersions.activeVersion,
+        currentImageDigest,
+        latestImageDigest,
       }
 
       if (isGuiInstalled()) {

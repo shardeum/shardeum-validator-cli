@@ -491,3 +491,25 @@ export async function fetchGenesisStatus(config: networkConfigType, pubKey: stri
 
   return genesisStatus?.success || false
 }
+
+export async function fetchLatestImageDigest() {
+  let latestImageDigest = ''
+  try {
+    const imageName = process.env.IMAGE_NAME || 'shardeum/shardeum-validator'
+    const tokenResponse = await axios.get(`https://ghcr.io/token?scope=repository:${imageName}:pull`)
+    const token = tokenResponse.data.token
+
+    const digestResponse = await axios.head(`https://ghcr.io/v2/${imageName}/manifests/latest`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.docker.distribution.manifest.v2+json',
+      },
+    })
+
+    latestImageDigest = digestResponse.headers['docker-content-digest'] || ''
+  } catch (error) {
+    console.error('Error fetching latest image digest:', error)
+  }
+  return latestImageDigest
+}
+
