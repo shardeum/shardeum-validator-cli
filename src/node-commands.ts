@@ -863,12 +863,25 @@ export function registerNodeCommands(program: Command) {
 
         const walletWithProvider = new ethers.Wallet(privateKey, provider)
 
+        const balance = await walletWithProvider.getBalance()
+        const stakeValueBN = ethers.utils.parseEther(stakeValue)
+
+        if (balance < stakeValueBN) {
+          const deficit = stakeValueBN.sub(balance)
+          console.error(
+            `Insufficient balance. Minimum Required Stake: ${stakeValue} SHM. Your balance: ${ethers.utils.formatEther(
+              balance
+            )}. Please add ${ethers.utils.formatEther(deficit)} SHM (plus some gas) to your wallet.`
+          )
+          process.exit(1)
+        }
+
         const [{ stakeRequired }, eoaData] = await Promise.all([
           fetchStakeParameters(config),
           fetchEOADetails(config, walletWithProvider.address),
         ])
 
-        if (ethers.BigNumber.from(stakeRequired).gt(ethers.utils.parseEther(stakeValue))) {
+        if (ethers.BigNumber.from(stakeRequired).gt(stakeValueBN)) {
           if (eoaData == null) {
             /*prettier-ignore*/
             console.error(`Stake amount must be greater than ${ethers.utils.formatEther(stakeRequired)} SHM`);
