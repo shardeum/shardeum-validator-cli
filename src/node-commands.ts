@@ -866,7 +866,7 @@ export function registerNodeCommands(program: Command) {
         const balance = await walletWithProvider.getBalance()
         const stakeValueBN = ethers.utils.parseEther(stakeValue)
 
-        if (balance < stakeValueBN) {
+        if (balance.lt(stakeValueBN)) {
           const deficit = stakeValueBN.sub(balance)
           console.error(
             `Insufficient balance. Minimum Required Stake: ${stakeValue} SHM. Your balance: ${ethers.utils.formatEther(
