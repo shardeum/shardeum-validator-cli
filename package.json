@@ -30,6 +30,9 @@
   },
   "author": "",
   "license": "ISC",
+  "engines": {
+    "node": "20.19.3"
+  },
   "devDependencies": {
     "@types/diskspace": "2.0.1",
     "@types/jest": "29.5.14",
@@ -58,7 +61,7 @@
     "typescript-estree": "18.1.0"
   },
   "dependencies": {
-    "@shardeum-foundation/lib-crypto-utils": "4.3.0",
+    "@shardeum-foundation/lib-crypto-utils": "4.3.2",
     "ajv": "8.12.0",
     "argon2": "0.41.1",
     "axios": "1.4.0",
